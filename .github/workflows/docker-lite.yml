@@ -20,10 +20,11 @@ jobs:
       - name: Checkout repo
         uses: actions/checkout@v4
 
-      # 将 GitHub 用户名转换为小写
+      # 将用户名转为小写，因为 GHCR 强制要求小写仓库名
       - name: Convert repository_owner to lowercase
         run: echo "USER_LOWER=$(echo ${{ github.repository_owner }} | tr '[:upper:]' '[:lower:]')" >> $GITHUB_ENV
 
+      # 下载 ManyACG 二进制
       - name: Download ManyACG binary
         run: |
           curl -L -o manyacg.tar.gz https://github.com/krau/ManyACG/releases/download/${VERSION}/manyacg-${VERSION}-linux-amd64.tar.gz
@@ -40,11 +41,11 @@ jobs:
           username: ${{ env.USER_LOWER }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build and push LITE image
+      - name: Build and push image using Dockerfile
         uses: docker/build-push-action@v5
         with:
           context: .
-          file: ./Dockerfile.lite
+          file: ./Dockerfile         # 👈 使用你的 Dockerfile
           platforms: linux/amd64
           push: true
           tags: |
