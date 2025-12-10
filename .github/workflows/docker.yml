@@ -1,4 +1,4 @@
-name: Docker Build and Push
+name: Build and Push ManyACG Images
 
 on:
   push:
@@ -12,8 +12,11 @@ jobs:
       contents: read
       packages: write
 
+    env:
+      IMAGE_BASE: ghcr.io/${{ github.repository_owner }}/manyacg
+
     steps:
-      - name: Checkout code
+      - name: Checkout repo
         uses: actions/checkout@v4
 
       - name: Set up Docker Buildx
@@ -26,10 +29,25 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build and push Docker image
+      # 带 FFmpeg 的完整版
+      - name: Build and push full image (with ffmpeg)
         uses: docker/build-push-action@v5
         with:
           context: .
+          file: ./Dockerfile
+          platforms: linux/amd64
           push: true
           tags: |
-            ghcr.io/${{ github.repository_owner }}/mangacg:latest
+            ${{ env.IMAGE_BASE }}:latest
+            ${{ env.IMAGE_BASE }}:ffmpeg
+
+      # 不带 FFmpeg 的轻量版
+      - name: Build and push lite image (no ffmpeg)
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile.lite
+          platforms: linux/amd64
+          push: true
+          tags: |
+            ${{ env.IMAGE_BASE }}:lite
