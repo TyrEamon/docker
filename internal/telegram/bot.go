@@ -34,6 +34,10 @@ func NewBot(cfg *config.Config, db *database.D1Client) (*BotHandler, error) {
 	
 	h := &BotHandler{API: b, Cfg: cfg, DB: db}
 	
+	// ✅ 注册 /save 命令
+	b.RegisterHandler(bot.HandlerTypeMessageText, "/save", bot.MatchTypeExact, h.handleSave)
+
+	// 其他 Handlers
 	b.RegisterHandler(bot.HandlerTypeMessageText, "", bot.MatchTypePrefix, h.handleManual)
 	b.RegisterHandler(bot.HandlerTypeMessageText, "", bot.MatchTypePrefix, func(ctx context.Context, b *bot.Bot, update *models.Update) {
 		if update.Message != nil && len(update.Message.Photo) > 0 {
@@ -102,6 +106,32 @@ func (h *BotHandler) PushHistoryToCloud() {
 	if h.DB != nil {
 		h.DB.PushHistory()
 	}
+}
+
+// ✅ 手动保存历史记录的 handler
+func (h *BotHandler) handleSave(ctx context.Context, b *bot.Bot, update *models.Update) {
+    userID := update.Message.From.ID
+
+    // 🔒 鉴权：只允许这几个 ID 触发
+    if userID != 8040798522 && userID != 6874581126 {
+        log.Printf("⛔ Unauthorized /save attempt from UserID: %d", userID)
+        return
+    }
+
+    log.Printf("💾 Manual save triggered by UserID: %d", userID)
+    
+    if h.DB != nil {
+        h.DB.PushHistory()
+        b.SendMessage(ctx, &bot.SendMessageParams{
+            ChatID: update.Message.Chat.ID,
+            Text:   "✅ History successfully saved to Cloudflare D1!",
+        })
+    } else {
+        b.SendMessage(ctx, &bot.SendMessageParams{
+            ChatID: update.Message.Chat.ID,
+            Text:   "❌ Database client is not initialized.",
+        })
+    }
 }
 
 func (h *BotHandler) handleManual(ctx context.Context, b *bot.Bot, update *models.Update) {
