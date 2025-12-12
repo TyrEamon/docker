@@ -27,15 +27,16 @@ type Config struct {
 	YandeTags      string
 	PixivArtistIDs []string
 
-	// ✨ 新增：Kemono 支持
+	// Kemono 支持
 	KemonoCreators []KemonoCreator
-	
-    // ✨ 新增：Danbooru 支持
-    DanbooruTags  string
-    DanbooruLimit int
+
+	// Danbooru 支持
+	DanbooruTags  string
+	DanbooruLimit int
 }
 
 func Load() *Config {
+	// 本地开发时尝试加载 .env；生产环境直接用环境变量
 	_ = godotenv.Load()
 
 	channelIDStr := getEnv("CHANNEL_ID", "")
@@ -50,6 +51,7 @@ func Load() *Config {
 	artistIDsStr := getEnv("PIXIV_ARTIST_IDS", "")
 	var artistIDs []string
 	if artistIDsStr != "" {
+		// 支持逗号或换行分隔
 		parts := strings.FieldsFunc(artistIDsStr, func(r rune) bool {
 			return r == ',' || r == '\n'
 		})
@@ -74,7 +76,7 @@ func Load() *Config {
 		PixivArtistIDs: artistIDs,
 	}
 
-	// ✨ 解析 Kemono 多平台配置
+	// 解析 Kemono 多平台配置
 	// 例子：
 	// KEMONO_SERVICES=fanbox,patreon
 	// KEMONO_FANBOX_USER_IDS=123,456
@@ -110,6 +112,14 @@ func Load() *Config {
 		}
 	}
 
+	// 解析 Danbooru 配置
+	// 例子：
+	// DANBOORU_TAGS=order:rank date:today -animated
+	// DANBOORU_LIMIT=5
+	danLimit, _ := strconv.Atoi(getEnv("DANBOORU_LIMIT", "3"))
+	cfg.DanbooruTags = getEnv("DANBOORU_TAGS", "order:rank -animated")
+	cfg.DanbooruLimit = danLimit
+
 	return cfg
 }
 
@@ -117,6 +127,7 @@ func getEnv(key, fallback string) string {
 	if value, exists := os.LookupEnv(key); exists {
 		return value
 	}
+	// 兼容带空格的 key 或旧命名
 	if value, exists := os.LookupEnv(strings.ReplaceAll(key, "_", " ")); exists {
 		return value
 	}
