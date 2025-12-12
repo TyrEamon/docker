@@ -9,6 +9,11 @@ import (
 	"github.com/joho/godotenv"
 )
 
+type KemonoCreator struct {
+	Service string   // fanbox / patreon / gumroad ...
+	UserIDs []string // 该平台下要巡逻的作者 ID
+}
+
 type Config struct {
 	BotToken       string
 	ChannelID      int64
@@ -21,10 +26,12 @@ type Config struct {
 	YandeLimit     int
 	YandeTags      string
 	PixivArtistIDs []string
+
+	// ✨ 新增：Kemono 支持
+	KemonoCreators []KemonoCreator
 }
 
 func Load() *Config {
-	// 尝试加载 .env 文件，如果不存在也没关系（生产环境直接读环境变量）
 	_ = godotenv.Load()
 
 	channelIDStr := getEnv("CHANNEL_ID", "")
@@ -39,7 +46,6 @@ func Load() *Config {
 	artistIDsStr := getEnv("PIXIV_ARTIST_IDS", "")
 	var artistIDs []string
 	if artistIDsStr != "" {
-		// 支持逗号或换行符分隔
 		parts := strings.FieldsFunc(artistIDsStr, func(r rune) bool {
 			return r == ',' || r == '\n'
 		})
@@ -50,28 +56,7 @@ func Load() *Config {
 		}
 	}
 
-	return &Config{
+	cfg := &Config{
 		BotToken:       getEnv("BOT_TOKEN", ""),
 		ChannelID:      channelID,
 		CF_AccountID:   getEnv("CLOUDFLARE_ACCOUNT_ID", ""),
-		CF_APIToken:    getEnv("CLOUDFLARE_API_TOKEN", ""),
-		D1_DatabaseID:  getEnv("D1_DATABASE_ID", ""),
-		WorkerURL:      getEnv("WORKER_URL", ""),
-		PixivPHPSESSID: getEnv("PIXIV_PHPSESSID", ""),
-		PixivLimit:     pixivLimit,
-		YandeLimit:     yandeLimit,
-		YandeTags:      getEnv("YANDE_TAGS", "order:random"),
-		PixivArtistIDs: artistIDs,
-	}
-}
-
-func getEnv(key, fallback string) string {
-	if value, exists := os.LookupEnv(key); exists {
-		return value
-	}
-	// 兼容带空格的key或者旧的命名习惯
-	if value, exists := os.LookupEnv(strings.ReplaceAll(key, "_", " ")); exists {
-		return value
-	}
-	return fallback
-}
