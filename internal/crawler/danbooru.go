@@ -36,6 +36,9 @@ func StartDanbooru(ctx context.Context, cfg *config.Config, db *database.D1Clien
 		SetTimeout(30 * time.Second).
 		SetRetryCount(2)
 
+	// ✅ 新增：伪装 User-Agent
+    client.SetHeader("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+
 	for {
 		select {
 		case <-ctx.Done():
