@@ -4,6 +4,9 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"image"
+	"image/jpeg" // ✅ 必须加，用于压缩
+	_ "image/png" // ✅ 必须加，支持 PNG 解码
 	"log"
 	"my-bot-go/internal/config"
 	"my-bot-go/internal/database"
@@ -47,20 +50,35 @@ func (h *BotHandler) Start(ctx context.Context) {
 
 // ProcessAndSend 增加了 width, height 参数
 func (h *BotHandler) ProcessAndSend(ctx context.Context, imgData []byte, postID, tags, caption, source string, width, height int) {
-	// 【新增步骤 1】先检查内存历史，如果有了就直接跳过
+	// 1. 先检查内存历史，如果有了就直接跳过
 	if h.DB.History[postID] {
 		log.Printf("⏭️ Skip %s: already in history", postID)
 		return
 	}
 
+	// 2. 检查图片大小，如果超过 9MB 则压缩 (Telegram 限制 10MB)
+	const MaxPhotoSize = 9 * 1024 * 1024 
+	finalData := imgData
+
+	if int64(len(imgData)) > MaxPhotoSize {
+		log.Printf("⚠️ Image %s is too large (%.2f MB), compressing...", postID, float64(len(imgData))/1024/1024)
+		compressed, err := compressImage(imgData, MaxPhotoSize)
+		if err != nil {
+			log.Printf("❌ Compression failed: %v. Trying original...", err)
+			// 压缩失败，还是试着用原图发一下（虽然大概率失败）
+		} else {
+			finalData = compressed
+		}
+	}
+
+	// 3. 发送到 Telegram
 	params := &bot.SendPhotoParams{
 		ChatID:  h.Cfg.ChannelID,
-		Photo:   &models.InputFileUpload{Filename: source + ".jpg", Data: bytes.NewReader(imgData)},
+		Photo:   &models.InputFileUpload{Filename: source + ".jpg", Data: bytes.NewReader(finalData)},
 		Caption: caption,
 	}
 
 	msg, err := h.API.SendPhoto(ctx, params)
-    // ... (后面保持不变)
 	if err != nil {
 		log.Printf("❌ Telegram Send Failed [%s]: %v", postID, err)
 		return
@@ -71,6 +89,7 @@ func (h *BotHandler) ProcessAndSend(ctx context.Context, imgData []byte, postID,
 	}
 	fileID := msg.Photo[len(msg.Photo)-1].FileID
 
+	// 4. 存入 D1 数据库
 	err = h.DB.SaveImage(postID, fileID, caption, tags, source, width, height)
 	if err != nil {
 		log.Printf("❌ D1 Save Failed: %v", err)
@@ -128,4 +147,36 @@ func (h *BotHandler) handleManual(ctx context.Context, b *bot.Bot, update *model
             MessageID: update.Message.ID,
         },
     })
+}
+
+// compressImage 尝试把图片压缩到指定大小以下
+func compressImage(data []byte, targetSize int64) ([]byte, error) {
+	// 解码图片
+	img, format, err := image.Decode(bytes.NewReader(data))
+	if err != nil {
+		return nil, fmt.Errorf("decode error: %v", err)
+	}
+    log.Printf("📉 Compressing %s image...", format)
+
+	// 循环尝试压缩，降低质量
+	quality := 85 // 初始质量
+	for {
+		buf := new(bytes.Buffer)
+		err = jpeg.Encode(buf, img, &jpeg.Options{Quality: quality})
+		if err != nil {
+			return nil, fmt.Errorf("encode error: %v", err)
+		}
+
+		compressedData := buf.Bytes()
+		size := int64(len(compressedData))
+
+		// 如果达标了，或者是质量太低了就不压了
+		if size <= targetSize || quality <= 40 {
+			log.Printf("✅ Compressed to %.2f MB (Quality: %d)", float64(size)/1024/1024, quality)
+			return compressedData, nil
+		}
+
+		// 否则降低质量继续
+		quality -= 10
+	}
 }
