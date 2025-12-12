@@ -1,78 +1,77 @@
 package config
 
 import (
-\t"log"
-\t"os"
-\t"strconv"
-\t"strings"
+	"log"
+	"os"
+	"strconv"
+	"strings"
 
-\t"github.com/joho/godotenv"
+	"github.com/joho/godotenv"
 )
 
 type Config struct {
-\tBotToken       string
-\tChannelID      int64
-\tCF_AccountID   string
-\tCF_APIToken    string
-\tD1_DatabaseID  string
-\tWorkerURL      string
-\tPixivPHPSESSID string
-\tPixivLimit     int
-\tYandeLimit     int
-\tYandeTags      string
-\tPixivArtistIDs []string
+	BotToken       string
+	ChannelID      int64
+	CF_AccountID   string
+	CF_APIToken    string
+	D1_DatabaseID  string
+	WorkerURL      string
+	PixivPHPSESSID string
+	PixivLimit     int
+	YandeLimit     int
+	YandeTags      string
+	PixivArtistIDs []string
 }
 
 func Load() *Config {
-\t// 尝试加载 .env 文件，如果不存在也没关系（生产环境直接读环境变量）
-\t_ = godotenv.Load()
+	// 尝试加载 .env 文件，如果不存在也没关系（生产环境直接读环境变量）
+	_ = godotenv.Load()
 
-\tchannelIDStr := getEnv("CHANNEL_ID", "")
-\tchannelID, err := strconv.ParseInt(channelIDStr, 10, 64)
-\tif err != nil {
-\t\tlog.Printf("⚠️ Warning: Invalid CHANNEL_ID: %v", err)
-\t}
+	channelIDStr := getEnv("CHANNEL_ID", "")
+	channelID, err := strconv.ParseInt(channelIDStr, 10, 64)
+	if err != nil {
+		log.Printf("⚠️ Warning: Invalid CHANNEL_ID: %v", err)
+	}
 
-\tpixivLimit, _ := strconv.Atoi(getEnv("PIXIV_LIMIT", "3"))
-\tyandeLimit, _ := strconv.Atoi(getEnv("YANDE_LIMIT", "1"))
+	pixivLimit, _ := strconv.Atoi(getEnv("PIXIV_LIMIT", "3"))
+	yandeLimit, _ := strconv.Atoi(getEnv("YANDE_LIMIT", "1"))
 
-\tartistIDsStr := getEnv("PIXIV_ARTIST_IDS", "")
-\tvar artistIDs []string
-\tif artistIDsStr != "" {
-\t\t// 支持逗号或换行符分隔
-\t\tparts := strings.FieldsFunc(artistIDsStr, func(r rune) bool {
-\t\t\treturn r == ',' || r == '
-'
-\t\t})
-\t\tfor _, p := range parts {
-\t\t\tif strings.TrimSpace(p) != "" {
-\t\t\t\tartistIDs = append(artistIDs, strings.TrimSpace(p))
-\t\t\t}
-\t\t}
-\t}
+	artistIDsStr := getEnv("PIXIV_ARTIST_IDS", "")
+	var artistIDs []string
+	if artistIDsStr != "" {
+		// 支持逗号或换行符分隔
+		parts := strings.FieldsFunc(artistIDsStr, func(r rune) bool {
+			return r == ',' || r == '\n'
+		})
+		for _, p := range parts {
+			if strings.TrimSpace(p) != "" {
+				artistIDs = append(artistIDs, strings.TrimSpace(p))
+			}
+		}
+	}
 
-\treturn &Config{
-\t\tBotToken:       getEnv("BOT_TOKEN", ""),
-\t\tChannelID:      channelID,
-\t\tCF_AccountID:   getEnv("CLOUDFLARE_ACCOUNT_ID", ""),
-\t\tCF_APIToken:    getEnv("CLOUDFLARE_API_TOKEN", ""),
-\t\tD1_DatabaseID:  getEnv("D1_DATABASE_ID", ""),
-\t\tWorkerURL:      getEnv("WORKER_URL", ""),
-\t\tPixivPHPSESSID: getEnv("PIXIV_PHPSESSID", ""),
-\t\tPixivLimit:     pixivLimit,
-\t\tYandeLimit:     yandeLimit,
-\t\tYandeTags:      getEnv("YANDE_TAGS", "order:random"),
-\t\tPixivArtistIDs: artistIDs,
-\t}
+	return &Config{
+		BotToken:       getEnv("BOT_TOKEN", ""),
+		ChannelID:      channelID,
+		CF_AccountID:   getEnv("CLOUDFLARE_ACCOUNT_ID", ""),
+		CF_APIToken:    getEnv("CLOUDFLARE_API_TOKEN", ""),
+		D1_DatabaseID:  getEnv("D1_DATABASE_ID", ""),
+		WorkerURL:      getEnv("WORKER_URL", ""),
+		PixivPHPSESSID: getEnv("PIXIV_PHPSESSID", ""),
+		PixivLimit:     pixivLimit,
+		YandeLimit:     yandeLimit,
+		YandeTags:      getEnv("YANDE_TAGS", "order:random"),
+		PixivArtistIDs: artistIDs,
+	}
 }
 
 func getEnv(key, fallback string) string {
-\tif value, exists := os.LookupEnv(key); exists {
-\t\treturn value
-\t}
-\t// 兼容带空格的key或者旧的命名习惯
-\tif value, exists := os.LookupEnv(strings.ReplaceAll(key, "_", " ")); exists {
-\t\treturn value
-\t}
-\treturn fallback
+	if value, exists := os.LookupEnv(key); exists {
+		return value
+	}
+	// 兼容带空格的key或者旧的命名习惯
+	if value, exists := os.LookupEnv(strings.ReplaceAll(key, "_", " ")); exists {
+		return value
+	}
+	return fallback
 }
