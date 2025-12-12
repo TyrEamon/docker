@@ -14,6 +14,7 @@ type D1Client struct {
 	client  *resty.Client
 	cfg     *config.Config
 	History map[string]bool
+	lastPush  time.Time
 }
 
 func NewD1Client(cfg *config.Config) *D1Client {
@@ -47,6 +48,11 @@ func (d *D1Client) PushHistory() {
 	if d.cfg.WorkerURL == "" {
 		return
 	}
+	
+	if time.Since(d.lastPush) < 10*time.Second {
+		return
+	}
+	
 	var idList []string
 	for id := range d.History {
 		idList = append(idList, id)
@@ -60,7 +66,8 @@ func (d *D1Client) PushHistory() {
 	if err != nil {
 		log.Printf("⚠️ Push history failed: %v", err)
 	} else {
-		log.Println("☁️ History updated to cloud")
+		d.lastPush = time.Now()
+		//log.Println("☁️ History updated to cloud")
 	}
 }
 
