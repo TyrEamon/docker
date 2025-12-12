@@ -170,7 +170,19 @@ func StartPixiv(ctx context.Context, cfg *config.Config, db *database.D1Client, 
 						// 发送并存库 (带宽高!)
 						// 注意：这里的 source 我们传 "pixiv"，但 filename 最好带上 p0
 						// ProcessAndSend 内部会用 subPid 作为 ID 存入 D1
-						botHandler.ProcessAndSend(ctx, imgResp.Body(), subPid, tagsStr, caption, "pixiv", page.Width, page.Height)
+						// ✅ 安全检查：防止 invalid dimensions 错误
+						sendWidth := page.Width
+						sendHeight := page.Height
+
+						// 如果 API 返回 0，或者尺寸太离谱（超过 10000px），就重置为 0 让 Telegram 自动处理
+						if sendWidth <= 0 || sendHeight <= 0 || sendWidth > 10000 || sendHeight > 10000 {
+							log.Printf("⚠️ Invalid dimensions from Pixiv API (%dx%d), resetting to 0 (Auto)", sendWidth, sendHeight)
+							sendWidth = 0
+							sendHeight = 0
+						}
+
+						// 发送并存库
+						botHandler.ProcessAndSend(ctx, imgResp.Body(), subPid, tagsStr, caption, "pixiv", sendWidth, sendHeight)
 						
 						time.Sleep(3 * time.Second) // 慢一点，防止被 ban
 					}
