@@ -32,12 +32,9 @@ func StartDanbooru(ctx context.Context, cfg *config.Config, db *database.D1Clien
 		return
 	}
 
-	// 1. 初始化 Client，添加 User-Agent 防止被 API 拦截
 	client := resty.New().
 		SetTimeout(30 * time.Second).
-		SetRetryCount(2).
-		SetHeader("User-Agent", "MtcACG-Bot/1.0 (TelegramBot)"). // 必须要有 User-Agent
-		SetHeader("Accept", "application/json")
+		SetRetryCount(2)
 
 	for {
 		select {
@@ -57,13 +54,6 @@ func StartDanbooru(ctx context.Context, cfg *config.Config, db *database.D1Clien
 			if err != nil {
 				log.Printf("Danbooru Error: %v", err)
 				time.Sleep(1 * time.Minute)
-				continue
-			}
-
-			// 检查是否返回了 JSON，防止被拦截返回 HTML
-			if !strings.HasPrefix(strings.TrimSpace(string(resp.Body())), "[") {
-				log.Printf("⚠️ Danbooru API returned invalid JSON (possibly blocked): %s...", string(resp.Body())[:100])
-				time.Sleep(5 * time.Minute)
 				continue
 			}
 
@@ -93,14 +83,11 @@ func StartDanbooru(ctx context.Context, cfg *config.Config, db *database.D1Clien
 				}
 
 				imgURL := post.FileURL
-				// 如果有大图优先用大图，但有些时候大图需要鉴权，如果失败可以回退
-				// 这里简单逻辑：默认用 FileURL
-				
 				log.Printf("⬇️ Downloading Danbooru: %d", post.ID)
 
 				imgResp, err := client.R().Get(imgURL)
 				if err != nil || imgResp.StatusCode() != 200 {
-					log.Printf("Danbooru download error: %v (Status: %d)", err, imgResp.StatusCode())
+					log.Printf("Danbooru download error: %v", err)
 					continue
 				}
 
@@ -124,15 +111,14 @@ func StartDanbooru(ctx context.Context, cfg *config.Config, db *database.D1Clien
 				)
 
 				hasNew = true
-				time.Sleep(3 * time.Second) // 避免刷太快
+				time.Sleep(3 * time.Second)
 			}
-
-			// db.PushHistory() 已移除，因为 SaveImage 实时写入数据库
 
 			if hasNew {
-				log.Println("😴 Danbooru Batch Done.")
+				db.PushHistory()
 			}
-			log.Println("😴 Danbooru Sleeping 10m...")
+
+			log.Println("😴 Danbooru Done. Sleeping 10m...")
 			time.Sleep(10 * time.Minute)
 		}
 	}

@@ -45,19 +45,9 @@ func StartKemono(ctx context.Context, cfg *config.Config, db *database.D1Client,
 		return
 	}
 
-	// 1. 初始化 Client，添加仿真浏览器 Header
 	client := resty.New().
 		SetTimeout(60 * time.Second).
-		SetRetryCount(3).
-		SetHeader("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36").
-		SetHeader("Accept", "application/json, text/plain, */*").
-		SetHeader("Accept-Language", "en-US,en;q=0.9").
-		SetHeader("Referer", "https://kemono.su/") // 使用 .su 或 .cr
-
-	// 如果配置中有 Cookie，可以在这里加上 (需要在 config.go 添加字段)
-	// if cfg.KemonoCookie != "" {
-	// 	client.SetHeader("Cookie", cfg.KemonoCookie)
-	// }
+		SetRetryCount(3)
 
 	for {
 		select {
@@ -75,18 +65,10 @@ func StartKemono(ctx context.Context, cfg *config.Config, db *database.D1Client,
 						continue
 					}
 
-					// 注意 API 域名可能变动，目前常用 .su 或 .cr
-					listURL := fmt.Sprintf("https://kemono.su/api/v1/%s/user/%s/posts", service, uid)
+					listURL := fmt.Sprintf("https://kemono.cr/api/v1/%s/user/%s/posts", service, uid)
 					resp, err := client.R().Get(listURL)
 					if err != nil {
 						log.Printf("⚠️ Kemono list error (%s/%s): %v", service, uid, err)
-						continue
-					}
-
-					// 如果返回 HTML (被 CF 拦截)，Unmarshal 会报错
-					if strings.HasPrefix(strings.TrimSpace(string(resp.Body())), "<") {
-						log.Printf("⚠️ Kemono blocked by Cloudflare (received HTML instead of JSON)")
-						time.Sleep(5 * time.Second)
 						continue
 					}
 
@@ -94,7 +76,7 @@ func StartKemono(ctx context.Context, cfg *config.Config, db *database.D1Client,
 						ID string `json:"id"`
 					}
 					if err := json.Unmarshal(resp.Body(), &posts); err != nil {
-						log.Printf("⚠️ Kemono list JSON error: %v (Body start: %s)", err, string(resp.Body())[:50])
+						log.Printf("⚠️ Kemono list JSON error: %v", err)
 						continue
 					}
 
@@ -111,17 +93,16 @@ func StartKemono(ctx context.Context, cfg *config.Config, db *database.D1Client,
 						if err := fetchKemonoPost(ctx, client, service, uid, p.ID, pid, db, botHandler); err == nil {
 							hasNew = true
 						}
-						time.Sleep(5 * time.Second) // 增加间隔，减少被封概率
+						time.Sleep(3 * time.Second)
 					}
 				}
 			}
 
-			// db.PushHistory() 已移除，因为 SaveImage 实时写入数据库
-
 			if hasNew {
-				log.Println("😴 Kemono Batch Done.")
+				db.PushHistory()
 			}
-			log.Println("😴 Kemono Sleeping 10m...")
+
+			log.Println("😴 Kemono Done. Sleeping 10m...")
 			time.Sleep(10 * time.Minute)
 		}
 	}
@@ -134,7 +115,7 @@ func fetchKemonoPost(
 	db *database.D1Client,
 	botHandler *telegram.BotHandler,
 ) error {
-	apiURL := fmt.Sprintf("https://kemono.su/api/v1/%s/user/%s/post/%s", service, uid, postID)
+	apiURL := fmt.Sprintf("https://kemono.cr/api/v1/%s/user/%s/post/%s", service, uid, postID)
 	resp, err := client.R().SetContext(ctx).Get(apiURL)
 	if err != nil {
 		return err
@@ -163,15 +144,14 @@ func fetchKemonoPost(
 
 		server := cdnMap[att.Path]
 		if server == "" {
-			// 备用服务器，有时是 .cr 有时是 .su
-			server = "https://n4.kemono.su"
+			server = "https://n4.kemono.cr"
 		}
 		imgURL := server + "/data" + att.Path
 
 		log.Printf("⬇️ Downloading Kemono: %s", imgURL)
 		imgResp, err := client.R().SetContext(ctx).Get(imgURL)
 		if err != nil || imgResp.StatusCode() != 200 {
-			log.Printf("❌ Kemono image error: %v (Status: %d)", err, imgResp.StatusCode())
+			log.Printf("❌ Kemono image error: %v", err)
 			continue
 		}
 		data := imgResp.Body()
