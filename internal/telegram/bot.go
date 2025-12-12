@@ -109,8 +109,9 @@ func (h *BotHandler) handleManual(ctx context.Context, b *bot.Bot, update *model
 	h.DB.SaveImage(postID, finalFileID, caption, "manual forwarded", "manual")
 	
 	b.SendMessage(ctx, &bot.SendMessageParams{
-		ChatID:           update.Message.Chat.ID,
-		Text:             "✅ Saved to D1!",
-		ReplyToMessageID: update.Message.ID,
+		ChatID: update.Message.Chat.ID,
+		Text:   "✅ Saved to D1!",
+		ReplyParameters: &models.ReplyParameters{
+			MessageID: update.Message.ID,
+		},
 	})
-}
