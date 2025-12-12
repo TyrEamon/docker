@@ -64,8 +64,6 @@ func StartDanbooru(ctx context.Context, cfg *config.Config, db *database.D1Clien
 				continue
 			}
 
-			hasNew := false
-
 			for _, post := range posts {
 				// 跳过无图 / 视频 / zip 等
 				if post.FileURL == "" || post.LargeFileURL == "" {
@@ -73,7 +71,8 @@ func StartDanbooru(ctx context.Context, cfg *config.Config, db *database.D1Clien
 				}
 				ext := strings.ToLower(post.FileExt)
 				if ext == "mp4" || ext == "webm" || ext == "zip" || ext == "swf" {
-					log.Printf("⚠️ Skip non-image post: %d (%s)", post.ID, post.FileExt)
+					// 建议：如果你不想让日志一直刷 "skip"，可以把这些视频也加入 history 屏蔽掉
+					// db.History[fmt.Sprintf("danbooru_%d", post.ID)] = true
 					continue
 				}
 
@@ -82,6 +81,7 @@ func StartDanbooru(ctx context.Context, cfg *config.Config, db *database.D1Clien
 					continue
 				}
 
+				// ⬇️ 这里补回了下载逻辑
 				imgURL := post.FileURL
 				log.Printf("⬇️ Downloading Danbooru: %d", post.ID)
 
@@ -98,7 +98,7 @@ func StartDanbooru(ctx context.Context, cfg *config.Config, db *database.D1Clien
 					strings.ReplaceAll(tagsStr, " ", " #"),
 				)
 
-				// 直接使用 API 提供的宽高
+				// 发送
 				botHandler.ProcessAndSend(
 					ctx,
 					imgResp.Body(),
@@ -110,12 +110,10 @@ func StartDanbooru(ctx context.Context, cfg *config.Config, db *database.D1Clien
 					post.ImageHeight,
 				)
 
-				hasNew = true
-				time.Sleep(3 * time.Second)
-			}
-
-			if hasNew {
+				// ✅ 【关键修正】每发完一张图，立刻同步到云端
 				db.PushHistory()
+
+				time.Sleep(3 * time.Second)
 			}
 
 			log.Println("😴 Danbooru Done. Sleeping 10m...")
