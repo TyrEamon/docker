@@ -1,122 +1,120 @@
 package crawler
 
 import (
-\t"context"
-\t"encoding/json"
-\t"fmt"
-\t"log"
-\t"my-bot-go/internal/config"
-\t"my-bot-go/internal/database"
-\t"my-bot-go/internal/telegram"
-\t"sort"
-\t"strconv"
-\t"strings"
-\t"time"
+	"context"
+	"encoding/json"
+	"fmt"
+	"log"
+	"my-bot-go/internal/config"
+	"my-bot-go/internal/database"
+	"my-bot-go/internal/telegram"
+	"sort"
+	"strconv"
+	"strings"
+	"time"
 
-\t"github.com/go-resty/resty/v2"
+	"github.com/go-resty/resty/v2"
 )
 
 func StartPixiv(ctx context.Context, cfg *config.Config, db *database.D1Client, bot *telegram.BotHandler) {
-\tclient := resty.New()
-\tclient.SetHeader("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
-\tclient.SetHeader("Referer", "https://www.pixiv.net/")
-\tclient.SetHeader("Cookie", "PHPSESSID="+cfg.PixivPHPSESSID)
+	client := resty.New()
+	client.SetHeader("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
+	client.SetHeader("Referer", "https://www.pixiv.net/")
+	client.SetHeader("Cookie", "PHPSESSID="+cfg.PixivPHPSESSID)
 
-\tfor {
-\t\tselect {
-\t\tcase <-ctx.Done():
-\t\t\treturn
-\t\tdefault:
-\t\t\tlog.Println("🍪 Checking Pixiv (Cookie Mode)...")
-\t\t\thasNew := false
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		default:
+			log.Println("🍪 Checking Pixiv (Cookie Mode)...")
+			hasNew := false
 
-\t\t\tfor _, uid := range cfg.PixivArtistIDs {
-\t\t\t\t// 1. 获取画师作品
-\t\t\t\tresp, err := client.R().Get(fmt.Sprintf("https://www.pixiv.net/ajax/user/%s/profile/all", uid))
-\t\t\t\tif err != nil || resp.StatusCode() != 200 {
-\t\t\t\t\tlog.Printf("⚠️ Pixiv User %s Error", uid)
-\t\t\t\t\tcontinue
-\t\t\t\t}
+			for _, uid := range cfg.PixivArtistIDs {
+				// 1. 获取画师作品
+				resp, err := client.R().Get(fmt.Sprintf("https://www.pixiv.net/ajax/user/%s/profile/all", uid))
+				if err != nil || resp.StatusCode() != 200 {
+					log.Printf("⚠️ Pixiv User %s Error", uid)
+					continue
+				}
 
-\t\t\t\tvar profile struct {
-\t\t\t\t\tBody struct {
-\t\t\t\t\t\tIllusts map[string]interface{} `json:"illusts"`
-\t\t\t\t\t} `json:"body"`
-\t\t\t\t}
-\t\t\t\tjson.Unmarshal(resp.Body(), &profile)
+				var profile struct {
+					Body struct {
+						Illusts map[string]interface{} `json:"illusts"`
+					} `json:"body"`
+				}
+				json.Unmarshal(resp.Body(), &profile)
 
-\t\t\t\t// 提取 ID 并排序
-\t\t\t\tvar ids []int
-\t\t\t\tfor k := range profile.Body.Illusts {
-\t\t\t\t\tif id, err := strconv.Atoi(k); err == nil {
-\t\t\t\t\t\tids = append(ids, id)
-\t\t\t\t\t}
-\t\t\t\t}
-\t\t\t\t// 降序排列 (最新的在前)
-\t\t\t\tsort.Sort(sort.Reverse(sort.IntSlice(ids)))
+				// 提取 ID 并排序
+				var ids []int
+				for k := range profile.Body.Illusts {
+					if id, err := strconv.Atoi(k); err == nil {
+						ids = append(ids, id)
+					}
+				}
+				// 降序排列 (最新的在前)
+				sort.Sort(sort.Reverse(sort.IntSlice(ids)))
 
-\t\t\t\t// 取前 N 个
-\t\t\t\tcount := 0
-\t\t\t\tfor _, id := range ids {
-\t\t\t\t\tif count >= cfg.PixivLimit {
-\t\t\t\t\t\tbreak
-\t\t\t\t\t}
-\t\t\t\t\tpid := fmt.Sprintf("pixiv_%d", id)
+				// 取前 N 个
+				count := 0
+				for _, id := range ids {
+					if count >= cfg.PixivLimit {
+						break
+					}
+					pid := fmt.Sprintf("pixiv_%d", id)
 
-\t\t\t\t\t// 去重检查
-\t\t\t\t\tif db.History[pid] {
-\t\t\t\t\t\tcontinue
-\t\t\t\t\t}
+					// 去重检查
+					if db.History[pid] {
+						continue
+					}
 
-\t\t\t\t\t// 2. 获取详情
-\t\t\t\t\tdetailResp, err := client.R().Get(fmt.Sprintf("https://www.pixiv.net/ajax/illust/%d", id))
-\t\t\t\t\tif err != nil {
-\t\t\t\t\t\tcontinue
-\t\t\t\t\t}
+					// 2. 获取详情
+					detailResp, err := client.R().Get(fmt.Sprintf("https://www.pixiv.net/ajax/illust/%d", id))
+					if err != nil {
+						continue
+					}
 
-\t\t\t\t\t// 解析 JSON (这里用 map 偷懒，不用定义超长结构体)
-\t\t\t\t\tvar detail map[string]interface{}
-\t\t\t\t\tjson.Unmarshal(detailResp.Body(), &detail)
-\t\t\t\t\t
-\t\t\t\t\tbody, ok := detail["body"].(map[string]interface{})
-\t\t\t\t\tif !ok { continue }
+					// 解析 JSON (这里用 map 偷懒，不用定义超长结构体)
+					var detail map[string]interface{}
+					json.Unmarshal(detailResp.Body(), &detail)
+					
+					body, ok := detail["body"].(map[string]interface{})
+					if !ok { continue }
 
-\t\t\t\t\ttitle := body["illustTitle"].(string)
-\t\t\t\t\tuserName := body["userName"].(string)
-\t\t\t\t\turls := body["urls"].(map[string]interface{})
-\t\t\t\t\toriginalURL := urls["original"].(string)
+					title := body["illustTitle"].(string)
+					userName := body["userName"].(string)
+					urls := body["urls"].(map[string]interface{})
+					originalURL := urls["original"].(string)
 
-\t\t\t\t\t// Tags 处理
-\t\t\t\t\ttagsObj := body["tags"].(map[string]interface{})
-\t\t\t\t\ttagsList := tagsObj["tags"].([]interface{})
-\t\t\t\t\tvar tagStrs []string
-\t\t\t\t\tfor _, t := range tagsList {
-\t\t\t\t\t\ttData := t.(map[string]interface{})
-\t\t\t\t\t\ttagStrs = append(tagStrs, tData["tag"].(string))
-\t\t\t\t\t}
-\t\t\t\t\ttagsStr := strings.Join(tagStrs, " ")
+					// Tags 处理
+					tagsObj := body["tags"].(map[string]interface{})
+					tagsList := tagsObj["tags"].([]interface{})
+					var tagStrs []string
+					for _, t := range tagsList {
+						tData := t.(map[string]interface{})
+						tagStrs = append(tagStrs, tData["tag"].(string))
+					}
+					tagsStr := strings.Join(tagStrs, " ")
 
-\t\t\t\t\t// 下载
-\t\t\t\t\tlog.Printf("⬇️ Downloading Pixiv: %s", title)
-\t\t\t\t\timgResp, err := client.R().Get(originalURL)
-\t\t\t\t\tif err == nil && imgResp.StatusCode() == 200 {
-\t\t\t\t\t\tcaption := fmt.Sprintf("Pixiv: %s
-Artist: %s
-Tags: #%s", title, userName, strings.ReplaceAll(tagsStr, " ", " #"))
-\t\t\t\t\t\tbot.ProcessAndSend(ctx, imgResp.Body(), pid, tagsStr, caption, "pixiv")
-\t\t\t\t\t\thasNew = true
-\t\t\t\t\t\tcount++
-\t\t\t\t\t}
-\t\t\t\t\ttime.Sleep(2 * time.Second)
-\t\t\t\t}
-\t\t\t}
+					// 下载
+					log.Printf("⬇️ Downloading Pixiv: %s", title)
+					imgResp, err := client.R().Get(originalURL)
+					if err == nil && imgResp.StatusCode() == 200 {
+						caption := fmt.Sprintf("Pixiv: %s\nArtist: %s\nTags: #%s", title, userName, strings.ReplaceAll(tagsStr, " ", " #"))
+						bot.ProcessAndSend(ctx, imgResp.Body(), pid, tagsStr, caption, "pixiv")
+						hasNew = true
+						count++
+					}
+					time.Sleep(2 * time.Second)
+				}
+			}
 
-\t\t\tif hasNew {
-\t\t\t\tdb.PushHistory()
-\t\t\t}
-\t\t\t
-\t\t\tlog.Println("😴 Pixiv Done. Sleeping 10m...")
-\t\t\ttime.Sleep(10 * time.Minute)
-\t\t}
-\t}
+			if hasNew {
+				db.PushHistory()
+			}
+			
+			log.Println("😴 Pixiv Done. Sleeping 10m...")
+			time.Sleep(10 * time.Minute)
+		}
+	}
 }
