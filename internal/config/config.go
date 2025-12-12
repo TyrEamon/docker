@@ -60,3 +60,61 @@ func Load() *Config {
 		BotToken:       getEnv("BOT_TOKEN", ""),
 		ChannelID:      channelID,
 		CF_AccountID:   getEnv("CLOUDFLARE_ACCOUNT_ID", ""),
+		CF_APIToken:    getEnv("CLOUDFLARE_API_TOKEN", ""),
+		D1_DatabaseID:  getEnv("D1_DATABASE_ID", ""),
+		WorkerURL:      getEnv("WORKER_URL", ""),
+		PixivPHPSESSID: getEnv("PIXIV_PHPSESSID", ""),
+		PixivLimit:     pixivLimit,
+		YandeLimit:     yandeLimit,
+		YandeTags:      getEnv("YANDE_TAGS", "order:random"),
+		PixivArtistIDs: artistIDs,
+	}
+
+	// ✨ 解析 Kemono 多平台配置
+	// 例子：
+	// KEMONO_SERVICES=fanbox,patreon
+	// KEMONO_FANBOX_USER_IDS=123,456
+	// KEMONO_PATREON_USER_IDS=111,222
+	servicesEnv := getEnv("KEMONO_SERVICES", "")
+	if servicesEnv != "" {
+		services := strings.Split(servicesEnv, ",")
+		for _, s := range services {
+			s = strings.TrimSpace(s)
+			if s == "" {
+				continue
+			}
+			key := "KEMONO_" + strings.ToUpper(s) + "_USER_IDS"
+			idsEnv := getEnv(key, "")
+			if idsEnv == "" {
+				continue
+			}
+			var ids []string
+			parts := strings.FieldsFunc(idsEnv, func(r rune) bool {
+				return r == ',' || r == '\n'
+			})
+			for _, p := range parts {
+				if strings.TrimSpace(p) != "" {
+					ids = append(ids, strings.TrimSpace(p))
+				}
+			}
+			if len(ids) > 0 {
+				cfg.KemonoCreators = append(cfg.KemonoCreators, KemonoCreator{
+					Service: s,
+					UserIDs: ids,
+				})
+			}
+		}
+	}
+
+	return cfg
+}
+
+func getEnv(key, fallback string) string {
+	if value, exists := os.LookupEnv(key); exists {
+		return value
+	}
+	if value, exists := os.LookupEnv(strings.ReplaceAll(key, "_", " ")); exists {
+		return value
+	}
+	return fallback
+}
