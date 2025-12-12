@@ -55,7 +55,7 @@ func StartKemono(ctx context.Context, cfg *config.Config, db *database.D1Client,
 			return
 		default:
 			log.Println("🧩 Checking Kemono...")
-			hasNew := false
+			// 移除 hasNew 变量，改为即时保存
 
 			for _, creator := range cfg.KemonoCreators {
 				service := strings.TrimSpace(creator.Service)
@@ -87,21 +87,29 @@ func StartKemono(ctx context.Context, cfg *config.Config, db *database.D1Client,
 							break
 						}
 						pid := fmt.Sprintf("kemono_%s_%s_%s", service, uid, p.ID)
+						// 粗略过滤，防止同一个 Post 反复进 fetchKemonoPost
 						if db.History[pid] {
 							continue
 						}
-						if err := fetchKemonoPost(ctx, client, service, uid, p.ID, pid, db, botHandler); err == nil {
-							hasNew = true
+						
+						// 进入详情抓取
+						err := fetchKemonoPost(ctx, client, service, uid, p.ID, pid, db, botHandler)
+						if err != nil {
+							log.Printf("❌ Failed to fetch post %s: %v", p.ID, err)
+						} else {
+							// 如果整个 Post 处理成功，把 Post ID 标记为已完成
+							db.History[pid] = true
 						}
+
+						// ✅ 【关键修改】每处理完一个 Post，立刻推送到 D1
+						db.PushHistory()
+						
 						time.Sleep(3 * time.Second)
 					}
 				}
 			}
 
-			if hasNew {
-				db.PushHistory()
-			}
-
+			// 循环结束后休息
 			log.Println("😴 Kemono Done. Sleeping 10m...")
 			time.Sleep(10 * time.Minute)
 		}
@@ -142,6 +150,14 @@ func fetchKemonoPost(
 			continue
 		}
 
+		// 构建唯一的子图 ID
+		subPID := fmt.Sprintf("%s_p%d", basePID, idx)
+		
+		// 检查子图是否发过（断点续传的关键）
+		if db.History[subPID] {
+			continue
+		}
+
 		server := cdnMap[att.Path]
 		if server == "" {
 			server = "https://n4.kemono.cr"
@@ -156,15 +172,10 @@ func fetchKemonoPost(
 		}
 		data := imgResp.Body()
 
-		// ✨ 方案 A：解码宽高
+		// 解码宽高
 		width, height := 0, 0
 		if cfg, _, err := image.DecodeConfig(bytes.NewReader(data)); err == nil {
 			width, height = cfg.Width, cfg.Height
-		}
-
-		subPID := fmt.Sprintf("%s_p%d", basePID, idx)
-		if db.History[subPID] {
-			continue
 		}
 
 		caption := fmt.Sprintf("Kemono: %s\nService: %s\nUser: %s\nPost: %s",
@@ -172,6 +183,10 @@ func fetchKemonoPost(
 		tagsStr := strings.Join(kResp.Post.Tags, " ")
 
 		botHandler.ProcessAndSend(ctx, data, subPID, tagsStr, caption, "kemono", width, height)
+		
+		// ✅ 【关键修改】每张子图发完，立刻推送到 D1
+		// 这样如果图片很多，下载到一半挂了，下次也不会重复发前几张
+		db.PushHistory()
 	}
 
 	return nil
