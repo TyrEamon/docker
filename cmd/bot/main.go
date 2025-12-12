@@ -40,4 +40,9 @@ func main() {
 	// 5. 启动 Bot 监听 (阻塞主线程)
 	log.Println("👂 Bot is listening...")
 	botHandler.Start(ctx)
+
+	// 【新增】程序退出前，最后保存一次历史
+	log.Println("🛑 Shutting down... Saving history...")
+	db.PushHistory()
+	log.Println("👋 Bye!")
 }
