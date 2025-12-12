@@ -8,7 +8,6 @@ import (
 	"my-bot-go/internal/config"
 	"my-bot-go/internal/database"
 	"net/http"
-	"strings"
 	"time"
 
 	"github.com/go-telegram/bot"
@@ -22,10 +21,12 @@ type BotHandler struct {
 }
 
 func NewBot(cfg *config.Config, db *database.D1Client) (*BotHandler, error) {
-	// 增加 HTTP Client 的超时时间，防止传大图超时
+	// 修复：WithHTTPClient 可能需要两个参数 (Duration, HttpClient)
+	// 根据报错提示：want (time.Duration, bot.HttpClient)
+	// 我们直接传入超时时间和 Client
 	opts := []bot.Option{
-		bot.WithHTTPClient(&http.Client{
-			Timeout: 90 * time.Second, // 延长到 90 秒
+		bot.WithHTTPClient(90*time.Second, &http.Client{
+			Timeout: 90 * time.Second,
 		}),
 		bot.WithDefaultHandler(func(ctx context.Context, b *bot.Bot, update *models.Update) {
 			// 默认不处理
@@ -74,18 +75,17 @@ func (h *BotHandler) ProcessAndSend(
 	maxRetries := 3
 	for i := 0; i < maxRetries; i++ {
 		// 使用单独的超时 Context，防止主 Context 意外取消
-		// 上传图片通常需要较长时间，给 60 秒
 		sendCtx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 		msg, err = h.API.SendPhoto(sendCtx, params)
 		cancel()
 
 		if err == nil {
-			break // 发送成功，跳出循环
+			break // 发送成功
 		}
 
 		// 如果是超时错误或网络错误，等待后重试
 		log.Printf("⚠️ Telegram Send Failed [%s] (Attempt %d/%d): %v", postID, i+1, maxRetries, err)
-		time.Sleep(time.Duration(3*(i+1)) * time.Second) // 递增等待：3s, 6s, 9s...
+		time.Sleep(time.Duration(3*(i+1)) * time.Second) // 递增等待
 	}
 
 	if err != nil {
@@ -108,8 +108,7 @@ func (h *BotHandler) ProcessAndSend(
 		log.Printf("✅ Saved %s [%dx%d]", postID, width, height)
 	}
 
-	// ⏳ 强制限流：每发一张图，强制暂停 3 秒
-	// 这是为了保护你的 Bot 不被 Telegram 限制
+	// ⏳ 强制限流：保护 Bot 不被 Telegram 限制
 	time.Sleep(3 * time.Second)
 }
 
@@ -142,7 +141,7 @@ func (h *BotHandler) handleManual(ctx context.Context, b *bot.Bot, update *model
 
 	finalFileID := msg.Photo[len(msg.Photo)-1].FileID
 
-	// 存入数据库 (宽高未知填0)
+	// 存入数据库
 	h.DB.SaveImage(postID, finalFileID, caption, "manual forwarded", "manual", 0, 0)
 
 	b.SendMessage(ctx, &bot.SendMessageParams{
