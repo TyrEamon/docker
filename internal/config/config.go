@@ -33,6 +33,8 @@ type Config struct {
 	// Danbooru 支持
 	DanbooruTags  string
 	DanbooruLimit int
+	DanbooruUsername string 
+	DanbooruAPIKey   string 
 }
 
 func Load() *Config {
@@ -119,6 +121,8 @@ func Load() *Config {
 	danLimit, _ := strconv.Atoi(getEnv("DANBOORU_LIMIT", "3"))
 	cfg.DanbooruTags = getEnv("DANBOORU_TAGS", "order:rank -animated")
 	cfg.DanbooruLimit = danLimit
+	cfg.DanbooruUsername = getEnv("DANBOORU_USERNAME", "")
+	cfg.DanbooruAPIKey = getEnv("DANBOORU_APIKEY", "")
 
 	return cfg
 }
