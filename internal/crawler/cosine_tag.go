@@ -145,16 +145,14 @@ func StartCosineTag(ctx context.Context, cfg *config.Config, db *database.D1Clie
 							cleanTitle, img.Author, tagsStr, "pic.cosine.ren")
 
 						// 发送
-						err = botHandler.ProcessAndSend(ctx, imgResp.Body(), dbKey, strings.Join(img.Tags, " "), caption, "pixiv", img.Width, img.Height)
+						// 直接调用，不接收返回值
+                        botHandler.ProcessAndSend(ctx, imgResp.Body(), dbKey, strings.Join(img.Tags, " "), caption, "pixiv", img.Width, img.Height)
                         
-                        if err == nil {
-                            db.History[dbKey] = true
-                            db.PushHistory()
-                            processedCount++
-                            time.Sleep(4 * time.Second) // 建议稍微慢点
-                        } else {
-                            log.Printf("⚠️ TG Send Failed: %v", err)
-                        }
+                         // ✅ 直接执行成功逻辑（删掉了 else 分支）
+                        db.History[dbKey] = true
+                        db.PushHistory()
+                        processedCount++
+                        time.Sleep(4 * time.Second) // 建议稍微慢点
 					}
 					
 					start += limit
