@@ -172,7 +172,7 @@ func StartPixiv(ctx context.Context, cfg *config.Config, db *database.D1Client, 
 						time.Sleep(4 * time.Second) // 慢一点，防止被 ban
 					}
 					
-					db.PushHistory()
+					if db.CheckExists(mainPid) {
 					
 					count++
 				}
