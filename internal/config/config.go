@@ -67,9 +67,9 @@ func Load() *Config {
 	}
 
 	// 👇 【新增】读取 Cosine 配置
-	cosineLimit, _ := strconv.Atoi(getEnv("COSINE_LIMIT_PER_TAG", "50")) // 默认 50 张
+	cosineLimit, _ := strconv.Atoi(getEnv("COSINE_LIMIT_PER_TAG", "30")) // 默认 50 张
 	
-	cosineTagsStr := getEnv("COSINE_TAGS", "原神") // 默认只爬"原神"
+	cosineTagsStr := getEnv("COSINE_TAGS", "初音未来") // 默认只爬"原神"
 	var cosineTags []string
 	if cosineTagsStr != "" {
 		// 支持逗号或换行分隔
