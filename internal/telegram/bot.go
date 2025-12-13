@@ -254,8 +254,9 @@ func (h *BotHandler) handleTextReply(ctx context.Context, b *bot.Bot, update *mo
 }
 
 // 处理 Inline 按钮点击的回调
+// 处理 Inline 按钮点击的回调
 func (h *BotHandler) handleCallback(ctx context.Context, b *bot.Bot, update *models.Update) {
-	// 必须回答 CallbackQuery，否则按钮会一直转圈
+	// 必须回答 CallbackQuery
 	defer b.AnswerCallbackQuery(ctx, &bot.AnswerCallbackQueryParams{
 		CallbackQueryID: update.CallbackQuery.ID,
 	})
@@ -263,10 +264,10 @@ func (h *BotHandler) handleCallback(ctx context.Context, b *bot.Bot, update *mod
 	userID := update.CallbackQuery.From.ID
 	session, exists := h.Sessions[userID]
 	
-	// 简单校验：如果没有会话，或者状态不是等待标签，就提示过期
 	if !exists || session.State != StateWaitingTag {
+        // 尝试给用户发个提示，这里 chatID 还没拿到，尝试从 From 获取
 		b.SendMessage(ctx, &bot.SendMessageParams{
-			ChatID: update.CallbackQuery.Message.Chat.ID,
+			ChatID: userID, 
 			Text:   "⚠️ 会话已过期，请重新转发图片。",
 		})
 		return
@@ -274,16 +275,38 @@ func (h *BotHandler) handleCallback(ctx context.Context, b *bot.Bot, update *mod
 
 	data := update.CallbackQuery.Data
 	tag := ""
-
 	if data == "tag_sfw" {
 		tag = "#TGC #SFW"
 	} else if data == "tag_nsfw" {
 		tag = "#TGC #NSFW #R18"
 	} else {
-		return // 未知按钮
+		return
 	}
 
-	chatID := update.CallbackQuery.Message.Chat.ID
+    // ✅ 安全获取 ChatID 和 MessageID
+    var chatID int64
+    var messageID int
+
+    switch m := update.CallbackQuery.Message.(type) {
+    case *models.Message:
+        chatID = m.Chat.ID
+        messageID = m.ID
+    case models.Message:
+        chatID = m.Chat.ID
+        messageID = m.ID
+    case *models.InaccessibleMessage:
+         chatID = m.Chat.ID
+         messageID = m.MessageID
+    case models.InaccessibleMessage:
+         chatID = m.Chat.ID
+         messageID = m.MessageID
+    }
+
+    if chatID == 0 {
+        // 兜底：如果上面的 switch 都没命中，说明类型非常奇怪
+        // 此时我们只能放弃编辑原消息，直接用 UserID 发新消息（私聊场景下 UserID = ChatID）
+        chatID = userID
+    }
 
 	// 1. 发送到频道
 	msg, err := b.SendPhoto(ctx, &bot.SendPhotoParams{
@@ -297,42 +320,35 @@ func (h *BotHandler) handleCallback(ctx context.Context, b *bot.Bot, update *mod
 		return
 	}
 
-	// 2. 存入 D1 数据库
+	// 2. 存入 D1
 	postID := fmt.Sprintf("manual_%d", msg.ID)
 	finalFileID := msg.Photo[len(msg.Photo)-1].FileID
 	err = h.DB.SaveImage(postID, finalFileID, session.Caption, tag, "manual", session.Width, session.Height)
 
-	// 3. 反馈给用户
+	// 3. 反馈
 	resultText := "上传成功，喵~ 🐱"
 	if err != nil {
 		resultText = "图片已发，但数据库保存失败。"
 	}
 
-    var messageID int
-    switch m := update.CallbackQuery.Message.(type) {
-    case *models.Message:
-        messageID = m.ID
-    case models.Message: // 有些版本可能是非指针
-        messageID = m.ID
-    // 如果有其他类型，这里会自动忽略，messageID 保持为 0
-    }
-
-    // 如果断言失败导致 ID 还是 0，尝试硬取（针对某些特定版本）
-    if messageID == 0 {
-    }
-
+    // 4. 编辑消息
     if messageID != 0 {
         b.EditMessageText(ctx, &bot.EditMessageTextParams{
             ChatID:    chatID,
-            MessageID: messageID, // ✅ 这里直接用算好的 int 变量
+            MessageID: messageID,
             Text:      resultText,
+        })
+    } else {
+        // 如果没拿到 MessageID，就发条新消息
+        b.SendMessage(ctx, &bot.SendMessageParams{
+            ChatID: chatID,
+            Text:   resultText,
         })
     }
 
-    // 清除会话
-    delete(h.Sessions, userID)
+	// 清除会话
+	delete(h.Sessions, userID)
 }
-
 
 // compressImage 尝试把图片压缩到指定大小以下
 func compressImage(data []byte, targetSize int64) ([]byte, error) {
