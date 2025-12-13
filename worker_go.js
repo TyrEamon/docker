@@ -73,6 +73,9 @@ if (path.startsWith('/image/')) {
 
     if (path === '/about') return new Response(htmlAbout(), {headers: {'Content-Type': 'text/html;charset=UTF-8'}});
 
+    // 显式处理 /r18，复用主页模板
+    if (path === '/r18') return new Response(htmlHome(), { headers: { 'Content-Type': 'text/html;charset=UTF-8' }});
+
     return new Response(htmlHome(), { headers: { 'Content-Type': 'text/html;charset=UTF-8' }});
   }
 };
@@ -128,6 +131,11 @@ const SIDEBAR_HTML = `
       <svg class="w-5 h-5 mr-3 text-gray-300" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4 6h4l3 6 3-6h4M4 18h4l3-6 3 6h4"/></svg>
       <span>随机抽图看看0w0</span>
     </a>
+
+    <a href="/r18" class="flex items-center p-3 text-red-300 hover:bg-red-500/10 rounded-lg transition group">
+      <svg class="w-5 h-5 mr-3 text-red-400 group-hover:text-red-200" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
+      <span class="font-bold">里世界 · R-18</span>
+    </a>
     
     <a href="/about" class="flex items-center p-3 text-gray-300 hover:bg-white/10 rounded-lg transition">
        <svg class="w-5 h-5 mr-3 text-gray-300" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" stroke-linecap="round" stroke-linejoin="round"/><path stroke-linecap="round" stroke-linejoin="round" d="M12 8.5v.01M11 11h1v5h1"/></svg>
@@ -140,7 +148,11 @@ const SIDEBAR_HTML = `
          <label class="relative inline-flex items-center cursor-pointer">
            <!-- 注意：这里改了 ID 防止冲突，并绑定全局开关函数 -->
            <input type="checkbox" id="r18-toggle-sidebar" class="sr-only peer" onchange="toggleR18Global(this)">
-           <div class="w-11 h-6 bg-gray-600 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-pink-600"></div>
+           <div class="w-11 h-6 bg-gray-600 peer-focus:outline-none rounded-full peer 
+           after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all 
+           after:translate-x-full peer-checked:after:translate-x-0 
+           bg-pink-600 peer-checked:bg-gray-600"></div>
+      
          </label>
       </div>
     </div>
@@ -260,6 +272,11 @@ async function handleDetail(id, env) {
           <svg class="w-5 h-5 mr-3 text-gray-300" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4 6h4l3 6 3-6h4M4 18h4l3-6 3 6h4"/></svg>
           <span>随机抽图看看0w0</span>
         </a>
+        <!-- 新增：里世界入口 -->
+        <a href="/r18" class="flex items-center p-3 text-red-300 hover:bg-red-500/10 rounded-lg transition group">
+          <svg class="w-5 h-5 mr-3 text-red-400 group-hover:text-red-200" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
+          <span class="font-bold">里世界 · R-18</span>
+        </a>    
         <a href="/about" class="flex items-center p-3 text-gray-300 hover:bg-white/10 rounded-lg transition">
            <svg class="w-5 h-5 mr-3 text-gray-300" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" stroke-linecap="round" stroke-linejoin="round"/><path stroke-linecap="round" stroke-linejoin="round" d="M12 8.5v.01M11 11h1v5h1"/></svg>
            <span>关于</span>
@@ -269,7 +286,10 @@ async function handleDetail(id, env) {
              <span class="text-gray-300 flex items-center"><span class="mr-3">🔞</span> R18 哒咩~</span>
              <label class="relative inline-flex items-center cursor-pointer">
                <input type="checkbox" id="r18-toggle-sidebar" class="sr-only peer" onchange="toggleR18(this)">
-               <div class="w-11 h-6 bg-gray-600 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-pink-600"></div>
+               <div class="w-11 h-6 bg-gray-600 peer-focus:outline-none rounded-full peer 
+               after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all 
+               after:translate-x-full peer-checked:after:translate-x-0 
+               bg-pink-600 peer-checked:bg-gray-600"></div>          
              </label>
           </div>
         </div>
@@ -636,6 +656,7 @@ function htmlAbout() {
 }
 
 // 首页：JS 动态 Masonry 版（绝对多列，不再依赖 CSS Columns）
+// 首页：JS 动态 Masonry 版
 function htmlHome() {
   return `<!DOCTYPE html>
 <html lang="zh-CN">
@@ -646,79 +667,27 @@ function htmlHome() {
   <script src="https://cdn.tailwindcss.com"></script>
   <style>
     body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #121212; color: #fff; overflow-x: hidden; }
-
     #bg-layer { position: fixed; inset: 0; z-index: -1; background-size: cover; background-position: center; filter: blur(6px) brightness(0.6); opacity: 0; transition: opacity 1s; pointer-events: none; }
-
-/* --- 开始 --- */
-    .header {
-      position: fixed; 
-      top: 0; left: 0; right: 0; 
-      z-index: 28; /* 只要比 Sidebar(200) 低就行 */
-      background: rgba(18, 18, 18, 0.90); /* 95% 不透明，几乎是纯黑，看着干净 */
-      backdrop-filter: none;
-      -webkit-backdrop-filter: none; /* 兼容 Safari */
-      
-      border-bottom: 1px solid rgba(255,255,255,0.1);
-      padding: 12px 16px; 
-      display: flex; 
-      align-items: center; 
-      justify-content: space-between;
-    }
-    /* --- 结束 --- */
+    .header { position: fixed; top: 0; left: 0; right: 0; z-index: 28; background: rgba(18, 18, 18, 0.90); backdrop-filter: none; -webkit-backdrop-filter: none; border-bottom: 1px solid rgba(255,255,255,0.1); padding: 12px 16px; display: flex; align-items: center; justify-content: space-between; }
     .logo { font-weight: 800; font-size: 18px; letter-spacing: 1px; color: #fff; text-decoration: none; }
-    
     .search-bar { flex: 1; max-width: 400px; margin: 0 16px; position: relative; }
     input { background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.15); color: white; padding: 8px 16px; border-radius: 99px; width: 100%; outline: none; transition: 0.3s; font-size: 14px; }
     input:focus { background: rgba(0,0,0,0.6); border-color: #ec4899; }
-
-    /* Masonry 容器 */
-    .masonry-wrap {
-      display: flex;
-      gap: 12px;
-      padding: 12px;
-      align-items: flex-start;
-    }
+    .masonry-wrap { display: flex; gap: 12px; padding: 12px; align-items: flex-start; }
     @media(min-width: 768px) { .masonry-wrap { padding: 20px; gap: 20px; max-width: 1800px; margin: 0 auto; } }
-    
-    /* 每一列 */
-    .masonry-col {
-      flex: 1;
-      display: flex;
-      flex-direction: column;
-      gap: 12px;
-      min-width: 0; /* 关键：防止被内容撑爆 */
-    }
+    .masonry-col { flex: 1; display: flex; flex-direction: column; gap: 12px; min-width: 0; }
     @media(min-width: 768px) { .masonry-col { gap: 20px; } }
-
-    .card { 
-      border-radius: 12px; 
-      overflow: hidden; 
-      background: #2a2a2a; 
-      position: relative; 
-      transition: transform 0.2s ease-out; 
-      box-shadow: 0 4px 6px rgba(0,0,0,0.3); 
-      width: 100%;
-    }
+    .card { border-radius: 12px; overflow: hidden; background: #2a2a2a; position: relative; transition: transform 0.2s ease-out; box-shadow: 0 4px 6px rgba(0,0,0,0.3); width: 100%; }
     .card:active { transform: scale(0.98); }
     .card:hover { transform: scale(1.02) translateY(-4px); z-index: 20; box-shadow: 0 16px 24px -6px rgba(0,0,0,0.6); }
-
     .card-inner { position: relative; width: 100%; }
     .placeholder { display: block; width: 100%; padding-bottom: calc(var(--h) / var(--w) * 100%); background: #2a2a2a; }
     .card-img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; opacity: 0; transition: opacity .3s; }
     .card-img.loaded { opacity: 1; }
-
-    .meta { 
-      position: absolute; bottom: 0; left: 0; right: 0; 
-      padding: 50px 10px 10px; 
-      background: linear-gradient(to top, rgba(0,0,0,0.8), transparent); 
-      opacity: 0; 
-      transition: opacity 0.2s; 
-    }
+    .meta { position: absolute; bottom: 0; left: 0; right: 0; padding: 50px 10px 10px; background: linear-gradient(to top, rgba(0,0,0,0.8), transparent); opacity: 0; transition: opacity 0.2s; }
     .card:hover .meta { opacity: 1; }
     @media(max-width: 768px) { .meta { padding: 30px 8px 8px; opacity: 1; } .title { font-size: 11px; } }
-
     .title { font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-shadow: 0 1px 3px rgba(0,0,0,0.9); color: #fff; }
-
     .loading-tip { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background: rgba(0,0,0,0.7); color: #fff; padding: 6px 16px; border-radius: 99px; font-size: 12px; backdrop-filter: blur(5px); opacity: 0; transition: opacity .2s; pointer-events: none; z-index: 100; }
   </style>
 </head>
@@ -746,11 +715,17 @@ function htmlHome() {
     const hideR18 = localStorage.getItem('hide_r18') === 'true';
 
     let offset = 0;
-    let q = '';
+    const params = new URLSearchParams(window.location.search);
+    let q = params.get('q') || ''; 
+    if(q) {
+        document.addEventListener('DOMContentLoaded', () => {
+             const searchInput = document.getElementById('search');
+             if(searchInput) searchInput.value = q;
+        });
+    }
+    
     let isLoading = false;
     let done = false;
-    
-    // 动态列数
     let colCount = window.innerWidth < 768 ? 2 : (window.innerWidth < 1200 ? 3 : 4);
     let cols = [];
 
@@ -765,12 +740,11 @@ function htmlHome() {
       }
     }
     
-    // 窗口调整时重置（简单粗暴直接刷新布局）
     window.addEventListener('resize', () => {
       const newCount = window.innerWidth < 768 ? 2 : (window.innerWidth < 1200 ? 3 : 4);
       if(newCount !== colCount) {
         colCount = newCount;
-        offset = 0; // 简单起见，重置
+        offset = 0;
         load(true);
       }
     });
@@ -789,6 +763,7 @@ function htmlHome() {
       }
 
       try {
+        // 注意：反引号被转义
         const res = await fetch(\`/api/posts?offset=\${offset}&q=\${encodeURIComponent(q)}\`);
         const data = await res.json();
 
@@ -807,20 +782,59 @@ function htmlHome() {
 
         let colHeights = new Array(colCount).fill(0);
         
-        // 分配卡片到最短的列
+        // 首页屏蔽列表
+        const blockKeywords = [
+             'R-18', 'NSFW', 'Hentai', '血腥', 'R18','性爱','性交','淫','乱伦','裸胸','露点',
+             '调教','捆绑','触手','高潮','喷水','阿黑颜','颜射','后宫','痴汉','NTR','3P','Boobs',
+             'Tits','Nipples','Breast','强暴','做爱','自慰','援交','喷水','Creampie','Cum','Bukkake','Sex','Fuck',
+             'Blowjob','口交','Handjob','Paizuri','乳交','Cunnilingus','Fellatio','Masturbation','Pussy','Vagina',
+             'Penis','Dick','Cock','Genitals','Pubic','阴部','阴茎','私处','白虎','爆乳','Breast','Nude','Topless','Ahegao',
+             '高潮脸','X-ray','断面图','Mind Break','恶堕','坏掉','透视','Futa','扶她','双性','Tentacle','BDSM','Bondage',
+             '束缚','Scat','Pregnant','妊娠','怀孕','异种','丸吞','破れタイツ','敗北','快楽堕ち','寝取られ','乳出し',
+             'Garter','Lingerie','Panty','Stockings','yande','ふたなり','輪姦','母子','近親','異種姦','孕ませ','緊縛',
+             '奴隷','悪堕ち','精神崩壊','セックス','中出し','顔射','イラマチオ','フェラ','パイズリ','手コキ','潮吹き','絶頂',
+             'アヘ顔','全裸','乳首','ペニス','ヴァギナ','クリトリス','近親','触手','レイプ','調教','スカトロ','ふたなり',
+             'パンツ下ろし'
+        ];
+
+        // 里世界展示列表（目前和屏蔽列表一致，你可以按需修改）
+        const r18Keywords = [
+          'R-18', 'NSFW', 'Hentai', '血腥', 'R18','性爱','性交','淫','乱伦','裸胸','露点',
+          '调教','捆绑','触手','高潮','喷水','阿黑颜','颜射','后宫','痴汉','NTR','3P','Boobs',
+          'Tits','Nipples','Breast','强暴','做爱','自慰','援交','喷水','Creampie','Cum','Bukkake','Sex','Fuck',
+          'Blowjob','口交','Handjob','Paizuri','乳交','Cunnilingus','Fellatio','Masturbation','Pussy','Vagina',
+          'Penis','Dick','Cock','Genitals','Pubic','阴部','阴茎','私处','白虎','爆乳','Breast','Nude','Topless','Ahegao',
+          '高潮脸','X-ray','断面图','Mind Break','恶堕','坏掉','透视','Futa','扶她','双性','Tentacle','BDSM','Bondage',
+          '捆绑','束缚','Scat','Pregnant','妊娠','怀孕','异种','绳艺','丸吞','破れタイツ','敗北','快楽堕ち','寝取られ','乳出し',
+          'パンツ下ろし','尻揉み','比基尼','裸足','School Swimsuit','アナル尻尾','Maid','Swimsuit','Ass','成人','成人','Pantyhose',
+          'Garter','连裤袜','ロリ','Lingerie','Panty','Stockings','yande','ふたなり','輪姦','母子','近親','異種姦','孕ませ','緊縛',
+          '奴隷','悪堕ち','精神崩壊','セックス','中出し','顔射','イラマチオ','フェラ','パイズリ','手コキ','潮吹き','絶頂',
+          'アヘ顔','全裸','乳首','ペニス','ヴァギナ','クリトリス','近親','触手','レイプ','調教','スカトロ','ふたなり',
+        ]; 
+
+        const isR18Page = window.location.pathname === '/r18';
+
         for (const item of data) {
-          if (hideR18 && (item.tags || '').includes('R-18')) continue;
+          const textToCheck = ((item.caption || '') + (item.tags || '')).toLowerCase();
           
+          if (isR18Page) {
+             // 里世界：用 r18Keywords 来决定“收进去”
+             const isR18Content = r18Keywords.some(k => textToCheck.includes(k.toLowerCase()));
+             if (!isR18Content) continue; 
+          } else {
+             // 首页：用 blockKeywords 来“屏蔽”
+             const isSensitive = blockKeywords.some(k => textToCheck.includes(k.toLowerCase()));
+             if (hideR18 && isSensitive) continue;
+          }
+
           const w = item.width || 3;
           const h = item.height || 4;
-          const title = (item.caption || '').split('\\n')[0];
+          // 注意：这里用了四个反斜杠来表示转义后的换行符匹配
+          const title = (item.caption || '').split('\\\\n')[0]; 
 
-          // 找最短列
           let minH = colHeights[0];
           let minIdx = 0;
           for(let i=1; i<colCount; i++) {
-            // 这里其实应该用真实高度，但用 CSS flex 自动分配也是一种偷懒做法
-            // 这里我们改用轮询分配，或者根据列的子元素数量
             if(cols[i].childElementCount < cols[minIdx].childElementCount) {
               minIdx = i;
             }
@@ -828,6 +842,7 @@ function htmlHome() {
 
           const card = document.createElement('div');
           card.className = 'card';
+          // 注意：这里的反引号是转义过的 \`
           card.innerHTML = \`
             <a href="/detail/\${item.id}">
               <div class="card-inner">
@@ -858,7 +873,6 @@ function htmlHome() {
       }
     });
 
-    // 初次加载
     load(true);
   </script>
 </body>
