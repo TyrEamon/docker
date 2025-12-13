@@ -248,7 +248,7 @@ func (h *BotHandler) handleTextReply(ctx context.Context, b *bot.Bot, update *mo
 
 		b.SendMessage(ctx, &bot.SendMessageParams{
 			ChatID:      update.Message.Chat.ID,
-			Text:        fmt.Sprintf("✅ 标题已确认: `%s`\n请点击下方按钮选择标签：", session.Caption),
+			Text:        fmt.Sprintf("✅ 狗修金,标题确认好了喵~: `%s`\n请主人狠狠点击下方按钮选择标签,打上只属于主人的标记吧。：", session.Caption),
 			ParseMode:   models.ParseModeMarkdown,
 			ReplyMarkup: kb,
 		})
@@ -270,7 +270,7 @@ func (h *BotHandler) handleCallback(ctx context.Context, b *bot.Bot, update *mod
 	if !exists || session.State != StateWaitingTag {
 		b.SendMessage(ctx, &bot.SendMessageParams{
 			ChatID: userID, 
-			Text:   "⚠️ 会话已过期，请重新转发图片。",
+			Text:   "⚠️ 哎哟,会话已过期，请重新转发图片,喵~。",
 		})
 		return
 	}
