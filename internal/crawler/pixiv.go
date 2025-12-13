@@ -179,8 +179,8 @@ func StartPixiv(ctx context.Context, cfg *config.Config, db *database.D1Client, 
 			}
 
 			
-			log.Println("😴 Pixiv Done. Sleeping 180m...")
-			time.Sleep(180 * time.Minute)
+			log.Println("😴 Pixiv Done. Sleeping 90m...")
+			time.Sleep(90 * time.Minute)
 		}
 	}
 }
