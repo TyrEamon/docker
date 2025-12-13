@@ -13,6 +13,9 @@ ENV GOPROXY=https://goproxy.cn,direct
 # 不要分步拷了，分步拷虽然能利用缓存，但在这种初次构建且没有 go.sum 的情况下会出问题。
 COPY . .
 
+# 强制升级库到最新版
+RUN go get -u github.com/go-telegram/bot  # <--- ✅ 加上这行
+
 # 2. 现在有了源代码，go mod tidy 才能正确分析出你需要哪些包
 RUN touch go.sum
 RUN go mod tidy
