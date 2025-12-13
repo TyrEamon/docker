@@ -50,7 +50,7 @@ func NewBot(cfg *config.Config, db *database.D1Client) (*BotHandler, error) {
 		return nil, err
 	}
 	
-	h := &BotHandler{API: b, Cfg: cfg, DB: db，Sessions: make(map[int64]*UserSession),}
+	h := &BotHandler{API: b, Cfg: cfg, DB: db,Sessions: make(map[int64]*UserSession),}
 	
 	// ✅ 注册 /save 命令
 	b.RegisterHandler(bot.HandlerTypeMessageText, "/save", bot.MatchTypeExact, h.handleSave)
