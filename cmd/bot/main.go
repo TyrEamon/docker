@@ -44,6 +44,8 @@ func main() {
 	// 👇 【新增】启动 Cosine Tag 爬虫 🚀
 	go crawler.StartCosineTag(ctx, cfg, db, botHandler)
 
+	go crawler.StartManyACGSese(ctx, cfg, db, botHandler)
+
 
 	// 5. 启动 Bot 监听 (阻塞主线程)
 	log.Println("👂 Bot is listening...")
