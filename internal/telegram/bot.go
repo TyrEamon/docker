@@ -145,7 +145,7 @@ func (h *BotHandler) handleManual(ctx context.Context, b *bot.Bot, update *model
     postID := fmt.Sprintf("manual_%d", update.Message.ID)
     caption := update.Message.Caption
     if caption == "" {
-        caption = "Forwarded Image"
+        caption = "MtcACG:TG"
     }
 
     // 先转存到图床频道
@@ -168,7 +168,7 @@ func (h *BotHandler) handleManual(ctx context.Context, b *bot.Bot, update *model
     width := photo.Width
     height := photo.Height
 
-    h.DB.SaveImage(postID, finalFileID, caption, "manual forwarded", "manual", width, height)
+    h.DB.SaveImage(postID, finalFileID, caption, "TG-forward", "TG-C", width, height)
 
     b.SendMessage(ctx, &bot.SendMessageParams{
         ChatID: update.Message.Chat.ID,
