@@ -8,7 +8,6 @@ import (
 	"image/jpeg" // ✅ 必须加，用于压缩
 	_ "image/png" // ✅ 必须加，支持 PNG 解码
 	"log"
-	"strings"    // ✅ 新增：用于字符串处理 (/title, /no)
 	"my-bot-go/internal/config"
 	"my-bot-go/internal/database"
 
@@ -56,18 +55,21 @@ func NewBot(cfg *config.Config, db *database.D1Client) (*BotHandler, error) {
 	// ✅ 注册 /save 命令
 	b.RegisterHandler(bot.HandlerTypeMessageText, "/save", bot.MatchTypeExact, h.handleSave)
 
-	// ✅ 新增：监听所有文本消息，用于处理交互式问答
-	b.RegisterHandler(bot.HandlerTypeMessageText, "", bot.MatchTypePrefix, h.handleTextReply)
+    // 2. ✅ 修改这里：注册图片处理器
+    // 使用 HandlerTypeMessage (而不是 MessageText)，这样无论有无标题都能收到
+    b.RegisterHandler(bot.HandlerTypeMessage, "", bot.MatchTypePrefix, func(ctx context.Context, b *bot.Bot, update *models.Update) {
+        // 只有当消息包含图片时才处理
+        if update.Message != nil && len(update.Message.Photo) > 0 {
+            h.handleManual(ctx, b, update)
+        }
+    })
 
-	// 其他 Handlers
-	b.RegisterHandler(bot.HandlerTypeMessageText, "", bot.MatchTypePrefix, h.handleManual)
-	b.RegisterHandler(bot.HandlerTypeMessageText, "", bot.MatchTypePrefix, func(ctx context.Context, b *bot.Bot, update *models.Update) {
-		if update.Message != nil && len(update.Message.Photo) > 0 {
-			h.handleManual(ctx, b, update)
-		}
-	})
+    // 3. 最后注册文本回复监听 (用于处理状态机)
+    // 这样纯文本消息会走到这里，而图片消息已经在上面被处理了(如果库支持继续透传)
+    // 或者依靠内部的 if 判断来隔离
+    b.RegisterHandler(bot.HandlerTypeMessageText, "", bot.MatchTypePrefix, h.handleTextReply)
 
-	return h, nil
+    return h, nil
 }
 
 func (h *BotHandler) Start(ctx context.Context) {
@@ -182,10 +184,9 @@ func (h *BotHandler) handleManual(ctx context.Context, b *bot.Bot, update *model
 	}
 
 	// 询问用户
-	// ✅ 修改：更新了文案，引导使用 /title 和 /no
 	b.SendMessage(ctx, &bot.SendMessageParams{
 		ChatID: update.Message.Chat.ID,
-		Text:   fmt.Sprintf("📩 收到图片了,Daishiki喵~🐱！\n\n当前标题：\n%s\n\n🐱主人要自定义标题吗,喵？\n1️🐱和我说 `/title 就可以使用新标题了喵`\n2️⃣ 🐱说 `/no` 那就只能使用原标题的说,喵", caption),
+		Text:   fmt.Sprintf("📩 收到图片！当前标题为：\n`%s`\n\n是否需要自定义标题？\n1️⃣ 回复新标题自定义\n2️⃣ 回复 '/no' 或 '否' 使用默认值", caption),
 		ParseMode: models.ParseModeMarkdown,
 		ReplyParameters: &models.ReplyParameters{
 			MessageID: update.Message.ID,
@@ -205,25 +206,15 @@ func (h *BotHandler) handleTextReply(ctx context.Context, b *bot.Bot, update *mo
 		return
 	}
 
-	text := strings.TrimSpace(update.Message.Text)
+	text := update.Message.Text
 
 	// 状态机判断
 	switch session.State {
 
 	// 阶段 1: 确认标题
 	case StateWaitingTitle:
-		// ✅ 修改：支持 /no 保持默认，支持 /title 修改，也兼容直接发文本
-		if text == "/no" {
-			// Do nothing, keep original session.Caption
-		} else if strings.HasPrefix(text, "/title") {
-			// 去掉 /title 前缀，剩下的作为标题
-			newTitle := strings.TrimSpace(strings.TrimPrefix(text, "/title"))
-			if newTitle != "" {
-				session.Caption = newTitle
-			}
-		} else {
-			// 兼容逻辑：如果不是 /no 也没写 /title，直接把整个文本作为标题（方便懒人）
-			session.Caption = text
+		if text != "no" && text != "否" {
+			session.Caption = text // 用户输入了新标题
 		}
 
 		// 更新状态 -> 等待选标签
@@ -240,7 +231,7 @@ func (h *BotHandler) handleTextReply(ctx context.Context, b *bot.Bot, update *mo
 
 		b.SendMessage(ctx, &bot.SendMessageParams{
 			ChatID:      update.Message.Chat.ID,
-			Text:        fmt.Sprintf("✅ 狗修金,标题确认好了喵~: `%s`\n请主人狠狠点击下方按钮选择标签,打上只属于主人的标记吧。：", session.Caption),
+			Text:        fmt.Sprintf("✅ 标题已确认: `%s`\n请选择标签类型：", session.Caption),
 			ParseMode:   models.ParseModeMarkdown,
 			ReplyMarkup: kb,
 		})
