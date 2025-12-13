@@ -67,7 +67,7 @@ func StartYande(ctx context.Context, cfg *config.Config, db *database.D1Client, 
 				}
 
 				pid := fmt.Sprintf("yande_%d", post.ID)
-				if db.History[pid] {
+				if db.CheckExists(pid) {
 					continue
 				}
 
@@ -101,10 +101,11 @@ func StartYande(ctx context.Context, cfg *config.Config, db *database.D1Client, 
 				}
 
 				// ✅ 【关键修正】每处理完一组图，立即保存历史到云端
-				if db.CheckExists(pid) {
 
 				time.Sleep(3 * time.Second)
 			}
+
+			db.PushHistory()
 
 			log.Println("😴 Yande Done. Sleeping 180m...") // Log 文字修正，与下面一致
 			time.Sleep(180 * time.Minute)
