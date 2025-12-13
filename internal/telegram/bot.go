@@ -44,11 +44,9 @@ type BotHandler struct {
 func NewBot(cfg *config.Config, db *database.D1Client) (*BotHandler, error) {
 	opts := []bot.Option{
 		bot.WithDefaultHandler(func(ctx context.Context, b *bot.Bot, update *models.Update) {
-            // ✅ 调试日志：如果没匹配到任何 Handler，这里会打印
+            // 默认 Handler，仅做日志记录，防止未匹配消息静默失败
             if update.Message != nil {
-                log.Printf("⚠️ Unhandled Message: %s", update.Message.Text)
-            } else if update.CallbackQuery != nil {
-                log.Printf("⚠️ Unhandled Callback: %s", update.CallbackQuery.Data)
+                 log.Printf("⚠️ Unhandled: %s", update.Message.Text)
             }
 		}),
 	}
@@ -61,17 +59,25 @@ func NewBot(cfg *config.Config, db *database.D1Client) (*BotHandler, error) {
 	h := &BotHandler{API: b, Cfg: cfg, DB: db, Sessions: make(map[int64]*UserSession)}
 
     // ---------------------------------------------------------
-    // ✅ 修复：注册逻辑
+    // ✅ 修复： Handler 注册 (逻辑解耦)
     // ---------------------------------------------------------
     
-    // 1. 监听按钮回调 (Callback Query) - 使用空前缀匹配所有
+    // 1. 监听按钮回调 (Inline Button)
 	b.RegisterHandler(bot.HandlerTypeCallbackQueryData, "", bot.MatchTypePrefix, h.handleTagCallback)
 
-	// 2. 监听具体指令
+	// 2. 监听具体指令 (优先级最高)
 	b.RegisterHandler(bot.HandlerTypeMessageText, "/save", bot.MatchTypeExact, h.handleSave)
+    
+    // 3. 监听所有文本消息 (统一入口，不再分多个 Handler 抢夺)
+    //    这里用 MatchTypePrefix "" 匹配所有文本，然后在内部做 if/else 判断，这是最稳妥的
+    b.RegisterHandler(bot.HandlerTypeMessageText, "", bot.MatchTypePrefix, h.handleTextReply)
 
-	// 3. 监听所有文本/图片消息 (路由入口)
-	b.RegisterHandler(bot.HandlerTypeMessageText, "", bot.MatchTypePrefix, h.handleMainRouter)
+    // 4. 监听图片消息 (需要单独判断，因为 MessageText 匹配不到图片)
+    b.RegisterHandler(bot.HandlerTypeMessageText, "", bot.MatchTypePrefix, func(ctx context.Context, b *bot.Bot, update *models.Update) {
+        if len(update.Message.Photo) > 0 {
+            h.handleNewPhoto(ctx, b, update)
+        }
+    })
 
 	return h, nil
 }
@@ -82,83 +88,35 @@ func (h *BotHandler) Start(ctx context.Context) {
 }
 
 // =====================================================================================
-// ✅ 路由分发
+// ✅ 统一文本处理器 (解决冲突的核心)
 // =====================================================================================
 
-func (h *BotHandler) handleMainRouter(ctx context.Context, b *bot.Bot, update *models.Update) {
-    if update.Message == nil {
-        return
-    }
-
-    // A. 图片处理
-    if len(update.Message.Photo) > 0 {
-        h.handleNewPhoto(ctx, b, update)
-        return
-    }
-
-    // B. 文本处理 (指令或普通回复)
-    if update.Message.Text != "" {
-        h.handleTextReply(ctx, b, update)
-        return
-    }
-}
-
-// 处理新收到的图片
-func (h *BotHandler) handleNewPhoto(ctx context.Context, b *bot.Bot, update *models.Update) {
-	userID := update.Message.From.ID
-    log.Printf("📸 Received photo from User %d", userID)
-
-	photo := update.Message.Photo[len(update.Message.Photo)-1]
-	caption := update.Message.Caption
-	if caption == "" {
-		caption = "MtcACG:TG"
-	}
-
-	h.Sessions[userID] = &UserSession{
-		State:       StateWaitingTitle,
-		PhotoFileID: photo.FileID,
-		Width:       photo.Width,
-		Height:      photo.Height,
-		Caption:     caption,
-		MessageID:   update.Message.ID,
-	}
-
-	b.SendMessage(ctx, &bot.SendMessageParams{
-		ChatID: update.Message.Chat.ID,
-		Text:   fmt.Sprintf("📩 收到图片了,Daishiki喵！\n\n当前标题：\n%s\n\n主人要自定义标题吗,喵？\n1️和我说 `/title` 就可以使用新标题了喵\n2️说 `/no` 那就只能使用原标题的说,喵", caption),
-		ReplyParameters: &models.ReplyParameters{
-			MessageID: update.Message.ID,
-		},
-        // 尝试发个 RemoveKeyboard 清理旧键盘
-        ReplyMarkup: &models.ReplyKeyboardRemove{}, 
-	})
-}
-
-// 处理文本回复
 func (h *BotHandler) handleTextReply(ctx context.Context, b *bot.Bot, update *models.Update) {
-	userID := update.Message.From.ID
-	session, exists := h.Sessions[userID]
-    text := update.Message.Text
-    
-    // ✅ 调试日志
-    log.Printf("💬 Received text from User %d: %s", userID, text)
+    // 如果是图片消息误入，直接跳过
+    if len(update.Message.Photo) > 0 {
+        return
+    }
 
-	if !exists {
-        // 如果用户发了指令但 Session 没了，提示过期
-        if strings.Contains(text, "SFW") || strings.HasPrefix(text, "/") {
+	userID := update.Message.From.ID
+    text := update.Message.Text
+    log.Printf("💬 Text received from %d: %s", userID, text)
+
+	session, exists := h.Sessions[userID]
+    
+    // ----------------------------------------------------------
+    // 1. 优先检查是不是旧键盘的标签 (兼容逻辑)
+    // ----------------------------------------------------------
+    // 只要文本里包含 SFW 或者 NSFW，不管有没有 Session，都尝试处理
+    if strings.Contains(strings.ToUpper(text), "SFW") || strings.Contains(strings.ToUpper(text), "NSFW") {
+        if !exists {
              b.SendMessage(ctx, &bot.SendMessageParams{
                 ChatID: update.Message.Chat.ID,
-                Text:   "⚠️ 会话已过期或重启，请重新发送图片,喵~",
-                ReplyMarkup: &models.ReplyKeyboardRemove{}, 
+                Text:   "⚠️ 会话已过期，请重新发送图片喵~",
+                ReplyMarkup: &models.ReplyKeyboardRemove{}, // 顺手清键盘
             })
+            return
         }
-		return
-	}
 
-    // ============================================================
-    // 兼容逻辑：宽容匹配 SFW/NSFW 关键字
-    // ============================================================
-    if strings.Contains(strings.ToUpper(text), "SFW") || strings.Contains(strings.ToUpper(text), "NSFW") {
         tag := ""
         if strings.Contains(strings.ToUpper(text), "NSFW") {
              tag = "#TGC #NSFW #R18"
@@ -171,16 +129,31 @@ func (h *BotHandler) handleTextReply(ctx context.Context, b *bot.Bot, update *mo
         
         b.SendMessage(ctx, &bot.SendMessageParams{
             ChatID: update.Message.Chat.ID,
-            Text:   "✅ 识别到标签，已上传喵！（旧键盘已移除）",
-            ReplyMarkup: &models.ReplyKeyboardRemove{}, 
+            Text:   "✅ 已通过文本标签上传喵！（旧键盘正在移除...）",
+            ReplyMarkup: &models.ReplyKeyboardRemove{}, // 再次确保移除
         })
         return
     }
 
-    if session.State != StateWaitingTitle {
+    // ----------------------------------------------------------
+    // 2. 检查会话状态
+    // ----------------------------------------------------------
+	if !exists {
+		return
+	}
+
+    // 如果已经在 WaitingTag 阶段，说明用户乱发了其他字，但没发标签
+    if session.State == StateWaitingTag {
+        b.SendMessage(ctx, &bot.SendMessageParams{
+            ChatID: update.Message.Chat.ID,
+            Text:   "⚠️ 请点击上方的按钮选择标签，或者手动回复 TGC-SFW / TGC-NSFW 喵~",
+        })
         return
     }
 
+    // ----------------------------------------------------------
+    // 3. 处理 /no 和 /title
+    // ----------------------------------------------------------
 	if text == "/no" || strings.EqualFold(text, "no") {
 		// 确认使用原标题
 	} else if strings.HasPrefix(text, "/title ") {
@@ -204,6 +177,15 @@ func (h *BotHandler) handleTextReply(ctx context.Context, b *bot.Bot, update *mo
 
 	session.State = StateWaitingTag
 
+    // ✅ 关键修复：先发一条消息移除 Reply 键盘
+    // 这样做是为了彻底清除那个“幽灵”键盘，防止用户误触
+    // 之后我们再发 Inline 按钮
+    b.SendMessage(ctx, &bot.SendMessageParams{
+        ChatID: update.Message.Chat.ID,
+        Text:   "🔄 正在准备标签选择...",
+        ReplyMarkup: &models.ReplyKeyboardRemove{},
+    })
+
     // 发送 Inline 按钮
 	kb := &models.InlineKeyboardMarkup{
 		InlineKeyboard: [][]models.InlineKeyboardButton{
@@ -221,11 +203,39 @@ func (h *BotHandler) handleTextReply(ctx context.Context, b *bot.Bot, update *mo
 	})
 }
 
+// =====================================================================================
+// ✅ 图片处理器
+// =====================================================================================
+
+// 处理新收到的图片
+func (h *BotHandler) handleNewPhoto(ctx context.Context, b *bot.Bot, update *models.Update) {
+	userID := update.Message.From.ID
+	photo := update.Message.Photo[len(update.Message.Photo)-1]
+	caption := update.Message.Caption
+	if caption == "" {
+		caption = "MtcACG:TG"
+	}
+
+	h.Sessions[userID] = &UserSession{
+		State:       StateWaitingTitle,
+		PhotoFileID: photo.FileID,
+		Width:       photo.Width,
+		Height:      photo.Height,
+		Caption:     caption,
+		MessageID:   update.Message.ID,
+	}
+
+	b.SendMessage(ctx, &bot.SendMessageParams{
+		ChatID: update.Message.Chat.ID,
+		Text:   fmt.Sprintf("📩 收到图片了,Daishiki喵！\n\n当前标题：\n%s\n\n主人要自定义标题吗,喵？\n1️和我说 `/title` 就可以使用新标题了喵\n2️说 `/no` 那就只能使用原标题的说,喵", caption),
+		ReplyParameters: &models.ReplyParameters{
+			MessageID: update.Message.ID,
+		},
+	})
+}
+
 // 处理按钮回调 (Inline Button)
 func (h *BotHandler) handleTagCallback(ctx context.Context, b *bot.Bot, update *models.Update) {
-    // ✅ 调试日志
-    log.Printf("🔘 Button Clicked: %s by User %d", update.CallbackQuery.Data, update.CallbackQuery.From.ID)
-
 	userID := update.CallbackQuery.From.ID
 	session, exists := h.Sessions[userID]
 
