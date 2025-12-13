@@ -24,8 +24,8 @@ type ManyACGResponse struct {
 		} `json:"artist"`
 		Pictures []struct {
 			Regular string `json:"regular"`
-			Width   int    `json:"width"`  // ✅ 直接读取 API 提供的宽高
-			Height  int    `json:"height"` // ✅ 直接读取 API 提供的宽高
+			Width   int    `json:"width"` 
+			Height  int    `json:"height"` 
 		} `json:"pictures"`
 		Tags []string `json:"tags"`
 		R18  bool     `json:"r18"`
@@ -112,7 +112,7 @@ func StartManyACG(ctx context.Context, cfg *config.Config, db *database.D1Client
 				time.Sleep(1 * time.Second)
 			}
 
-			log.Println("😴 ManyACG Batch Done. Sleeping 5m...")
+			log.Println("😴 ManyACG Batch Done. Sleeping 30m...")
 			time.Sleep(30 * time.Minute)
 		}
 	}
