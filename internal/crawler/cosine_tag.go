@@ -114,7 +114,7 @@ func StartCosineTag(ctx context.Context, cfg *config.Config, db *database.D1Clie
                              dbKey = "pixiv_" + dbKey
                         }
 
-						if db.History[dbKey] {
+						if db.CheckExists(dbKey) {
 							continue
 						}
 
