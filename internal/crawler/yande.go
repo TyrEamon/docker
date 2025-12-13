@@ -101,7 +101,7 @@ func StartYande(ctx context.Context, cfg *config.Config, db *database.D1Client, 
 				}
 
 				// ✅ 【关键修正】每处理完一组图，立即保存历史到云端
-				db.PushHistory()
+				if db.CheckExists(pid) {
 
 				time.Sleep(3 * time.Second)
 			}
