@@ -37,10 +37,9 @@ func main() {
 	go crawler.StartYande(ctx, cfg, db, botHandler)
 	go crawler.StartPixiv(ctx, cfg, db, botHandler)
 	
-	// ✅ 补上漏掉的爬虫
 	go crawler.StartManyACG(ctx, cfg, db, botHandler)
-	go crawler.StartDanbooru(ctx, cfg, db, botHandler)
-	go crawler.StartKemono(ctx, cfg, db, botHandler)
+	//go crawler.StartDanbooru(ctx, cfg, db, botHandler)
+	//go crawler.StartKemono(ctx, cfg, db, botHandler)
 
 
 	// 5. 启动 Bot 监听 (阻塞主线程)
