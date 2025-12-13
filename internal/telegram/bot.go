@@ -15,28 +15,10 @@ import (
 	"github.com/go-telegram/bot/models"
 )
 
-// 状态常量
-const (
-	StateNone = iota
-	StateWaitingTitle    // 等待用户确认标题
-	StateWaitingTag      // 等待用户选择标签
-)
-
-// 用户会话，用于暂存转发图片的信息
-type UserSession struct {
-	State       int
-	PhotoFileID string
-	Width       int
-	Height      int
-	Caption     string // 图片原本的 caption 或者用户自定义的
-	MessageID   int    // 原消息 ID (方便引用回复)
-}
-
 type BotHandler struct {
 	API *bot.Bot
 	Cfg *config.Config
 	DB  *database.D1Client
-	Sessions map[int64]*UserSession // ✅ 新增：用户 ID -> 会话状态
 }
 
 func NewBot(cfg *config.Config, db *database.D1Client) (*BotHandler, error) {
@@ -50,26 +32,20 @@ func NewBot(cfg *config.Config, db *database.D1Client) (*BotHandler, error) {
 		return nil, err
 	}
 	
-	h := &BotHandler{API: b, Cfg: cfg, DB: db, Sessions: make(map[int64]*UserSession),}
+	h := &BotHandler{API: b, Cfg: cfg, DB: db}
 	
 	// ✅ 注册 /save 命令
 	b.RegisterHandler(bot.HandlerTypeMessageText, "/save", bot.MatchTypeExact, h.handleSave)
 
-    // 2. ✅ 修改这里：注册图片处理器
-    // 使用 HandlerTypeMessage (而不是 MessageText)，这样无论有无标题都能收到
-    b.RegisterHandler(bot.HandlerTypeMessage, "", bot.MatchTypePrefix, func(ctx context.Context, b *bot.Bot, update *models.Update) {
-        // 只有当消息包含图片时才处理
-        if update.Message != nil && len(update.Message.Photo) > 0 {
-            h.handleManual(ctx, b, update)
-        }
-    })
+	// 其他 Handlers
+	b.RegisterHandler(bot.HandlerTypeMessageText, "", bot.MatchTypePrefix, h.handleManual)
+	b.RegisterHandler(bot.HandlerTypeMessageText, "", bot.MatchTypePrefix, func(ctx context.Context, b *bot.Bot, update *models.Update) {
+		if update.Message != nil && len(update.Message.Photo) > 0 {
+			h.handleManual(ctx, b, update)
+		}
+	})
 
-    // 3. 最后注册文本回复监听 (用于处理状态机)
-    // 这样纯文本消息会走到这里，而图片消息已经在上面被处理了(如果库支持继续透传)
-    // 或者依靠内部的 if 判断来隔离
-    b.RegisterHandler(bot.HandlerTypeMessageText, "", bot.MatchTypePrefix, h.handleTextReply)
-
-    return h, nil
+	return h, nil
 }
 
 func (h *BotHandler) Start(ctx context.Context) {
@@ -159,148 +135,48 @@ func (h *BotHandler) handleSave(ctx context.Context, b *bot.Bot, update *models.
 }
 
 func (h *BotHandler) handleManual(ctx context.Context, b *bot.Bot, update *models.Update) {
-	if update.Message == nil || len(update.Message.Photo) == 0 {
-		return
-	}
-	userID := update.Message.From.ID
+    if update.Message == nil || len(update.Message.Photo) == 0 {
+        return
+    }
 
-	// 获取最大尺寸图片
-	photo := update.Message.Photo[len(update.Message.Photo)-1]
+    // 用户发来的最大尺寸那张图，里面自带宽高
+    photo := update.Message.Photo[len(update.Message.Photo)-1]
 
-	// 默认标题处理
-	caption := update.Message.Caption
-	if caption == "" {
-		caption = "MtcACG:TG" // 默认标题
-	}
+    postID := fmt.Sprintf("manual_%d", update.Message.ID)
+    caption := update.Message.Caption
+    if caption == "" {
+        caption = "Forwarded Image"
+    }
 
-	// 保存会话状态
-	h.Sessions[userID] = &UserSession{
-		State:       StateWaitingTitle,
-		PhotoFileID: photo.FileID,
-		Width:       photo.Width,
-		Height:      photo.Height,
-		Caption:     caption,
-		MessageID:   update.Message.ID,
-	}
+    // 先转存到图床频道
+    msg, err := b.SendPhoto(ctx, &bot.SendPhotoParams{
+        ChatID: h.Cfg.ChannelID,
+        Photo:  &models.InputFileString{Data: photo.FileID},
+        Caption: caption,
+    })
+    if err != nil {
+        b.SendMessage(ctx, &bot.SendMessageParams{
+            ChatID: update.Message.Chat.ID,
+            Text:   "❌ Forward failed: " + err.Error(),
+        })
+        return
+    }
 
-	// 询问用户
-	b.SendMessage(ctx, &bot.SendMessageParams{
-		ChatID: update.Message.Chat.ID,
-		Text:   fmt.Sprintf("📩 收到图片！当前标题为：\n`%s`\n\n是否需要自定义标题？\n1️⃣ 回复新标题自定义\n2️⃣ 回复 '/no' 或 '否' 使用默认值", caption),
-		ParseMode: models.ParseModeMarkdown,
-		ReplyParameters: &models.ReplyParameters{
-			MessageID: update.Message.ID,
-		},
-	})
-}
+    finalFileID := msg.Photo[len(msg.Photo)-1].FileID
 
-func (h *BotHandler) handleTextReply(ctx context.Context, b *bot.Bot, update *models.Update) {
-	if update.Message == nil {
-		return
-	}
-	userID := update.Message.From.ID
-	session, exists := h.Sessions[userID]
+    // 使用原消息里的宽高
+    width := photo.Width
+    height := photo.Height
 
-	// 如果该用户没有正在进行的会话，直接忽略
-	if !exists || session.State == StateNone {
-		return
-	}
+    h.DB.SaveImage(postID, finalFileID, caption, "manual forwarded", "manual", width, height)
 
-	text := update.Message.Text
-
-	// 状态机判断
-	switch session.State {
-
-	// 阶段 1: 确认标题
-	case StateWaitingTitle:
-		if text != "no" && text != "否" {
-			session.Caption = text // 用户输入了新标题
-		}
-
-		// 更新状态 -> 等待选标签
-		session.State = StateWaitingTag
-
-		// 发送键盘按钮供选择
-		kb := &models.ReplyKeyboardMarkup{
-			Keyboard: [][]models.KeyboardButton{
-				{{Text: "TGC-SFW"}, {Text: "TGC-NSFW"}},
-			},
-			OneTimeKeyboard: true,
-			ResizeKeyboard:  true,
-		}
-
-		b.SendMessage(ctx, &bot.SendMessageParams{
-			ChatID:      update.Message.Chat.ID,
-			Text:        fmt.Sprintf("✅ 标题已确认: `%s`\n请选择标签类型：", session.Caption),
-			ParseMode:   models.ParseModeMarkdown,
-			ReplyMarkup: kb,
-		})
-
-	// 阶段 2: 选择标签并上传
-	case StateWaitingTag:
-		tag := ""
-		if text == "TGC-SFW" {
-			tag = "#TGC #SFW"
-		} else if text == "TGC-NSFW" {
-			tag = "#TGC #NSFW #R18"
-		} else {
-			b.SendMessage(ctx, &bot.SendMessageParams{
-				ChatID: update.Message.Chat.ID,
-				Text:   "⚠️ 请点击下方按钮选择标签！",
-			})
-			return
-		}
-
-		// ✅ 标签合法，开始上传流程
-		h.processForwardUpload(ctx, b, update, session, tag)
-
-		// 流程结束，清除会话状态
-		delete(h.Sessions, userID)
-	}
-}
-
-// 最终上传函数
-func (h *BotHandler) processForwardUpload(ctx context.Context, b *bot.Bot, update *models.Update, session *UserSession, tag string) {
-	chatID := update.Message.Chat.ID
-
-	// 1. 发送到频道
-	msg, err := b.SendPhoto(ctx, &bot.SendPhotoParams{
-		ChatID:  h.Cfg.ChannelID,
-		Photo:   &models.InputFileString{Data: session.PhotoFileID},
-		Caption: fmt.Sprintf("%s\nTags: %s", session.Caption, tag),
-	})
-
-	if err != nil {
-		b.SendMessage(ctx, &bot.SendMessageParams{
-			ChatID:      chatID,
-			Text:        "❌ 发送失败，喵~ (" + err.Error() + ")",
-			ReplyMarkup: &models.ReplyKeyboardRemove{},
-		})
-		return
-	}
-
-	// 2. 存入 D1 数据库
-	postID := fmt.Sprintf("manual_%d", msg.ID)
-	finalFileID := msg.Photo[len(msg.Photo)-1].FileID
-
-	err = h.DB.SaveImage(postID, finalFileID, session.Caption, tag, "manual", session.Width, session.Height)
-
-	if err != nil {
-		b.SendMessage(ctx, &bot.SendMessageParams{
-			ChatID:      chatID,
-			Text:        "❌ 图片已发频道，但数据库保存失败，喵~",
-			ReplyMarkup: &models.ReplyKeyboardRemove{},
-		})
-	} else {
-		b.SendMessage(ctx, &bot.SendMessageParams{
-			ChatID:      chatID,
-			Text:        "上传成功，喵~ 🐱",
-			ReplyMarkup: &models.ReplyKeyboardRemove{},
-			ReplyParameters: &models.ReplyParameters{
-				MessageID: session.MessageID,
-			},
-		})
-	}
+    b.SendMessage(ctx, &bot.SendMessageParams{
+        ChatID: update.Message.Chat.ID,
+        Text:   "✅ Saved to D1!",
+        ReplyParameters: &models.ReplyParameters{
+            MessageID: update.Message.ID,
+        },
+    })
 }
 
 // compressImage 尝试把图片压缩到指定大小以下
