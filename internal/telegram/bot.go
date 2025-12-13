@@ -44,7 +44,7 @@ type BotHandler struct {
 func NewBot(cfg *config.Config, db *database.D1Client) (*BotHandler, error) {
 	opts := []bot.Option{
 		bot.WithDefaultHandler(func(ctx context.Context, b *bot.Bot, update *models.Update) {
-            // 默认不做任何事，防止多重触发
+            // 默认不做任何事
 		}),
 	}
 
@@ -56,17 +56,16 @@ func NewBot(cfg *config.Config, db *database.D1Client) (*BotHandler, error) {
 	h := &BotHandler{API: b, Cfg: cfg, DB: db, Sessions: make(map[int64]*UserSession)}
 
     // ---------------------------------------------------------
-    // ✅ 重新梳理 Handler 注册，防止冲突
+    // ✅ Handler 注册
     // ---------------------------------------------------------
 
-	// 1. 优先处理按钮回调 (Callback Query)
+	// 1. 优先处理按钮回调 (Inline Button)
 	b.RegisterHandler(bot.HandlerTypeCallbackQueryData, "", bot.MatchTypePrefix, h.handleTagCallback)
 
 	// 2. 注册具体指令 /save
 	b.RegisterHandler(bot.HandlerTypeMessageText, "/save", bot.MatchTypeExact, h.handleSave)
 
-	// 3. 统一消息入口：处理 图片 OR 文本回复 (/title, /no)
-    //    使用 MatchTypePrefix + "" 匹配所有文本/图片消息，然后在函数内部判断
+	// 3. 统一消息入口：处理 图片 OR 文本回复
 	b.RegisterHandler(bot.HandlerTypeMessageText, "", bot.MatchTypePrefix, h.handleMainRouter)
 
 	return h, nil
@@ -77,10 +76,9 @@ func (h *BotHandler) Start(ctx context.Context) {
 }
 
 // =====================================================================================
-// ✅ 核心逻辑路由 (解决冲突的关键)
+// ✅ 核心逻辑路由
 // =====================================================================================
 
-// 统一路由：根据消息类型分发
 func (h *BotHandler) handleMainRouter(ctx context.Context, b *bot.Bot, update *models.Update) {
     if update.Message == nil {
         return
@@ -92,7 +90,7 @@ func (h *BotHandler) handleMainRouter(ctx context.Context, b *bot.Bot, update *m
         return
     }
 
-    // B. 如果是文本 -> 检查是否是指令回复
+    // B. 如果是文本 -> 分发给文本处理
     if update.Message.Text != "" {
         h.handleTextReply(ctx, b, update)
         return
@@ -105,8 +103,6 @@ func (h *BotHandler) handleNewPhoto(ctx context.Context, b *bot.Bot, update *mod
 	photo := update.Message.Photo[len(update.Message.Photo)-1]
 
 	caption := update.Message.Caption
-    
-    // 🛠️ 修复多图逻辑：如果这只是多图中的一张且没标题，尽量不要覆盖掉正在进行的会话
 	if caption == "" {
 		caption = "MtcACG:TG"
 	}
@@ -126,25 +122,60 @@ func (h *BotHandler) handleNewPhoto(ctx context.Context, b *bot.Bot, update *mod
 		ReplyParameters: &models.ReplyParameters{
 			MessageID: update.Message.ID,
 		},
+        // 这里顺手移除可能残留的旧键盘（ReplyKeyboardRemove）
+        // 如果想保险一点，可以在发每条消息时都带上 ReplyKeyboardRemove，但这和 InlineKeyboard 冲突
+        // 既然现在都转 Inline 了，我们可以在这里先尝试清一次
 	})
 }
 
-// 处理文本回复 (/title, /no)
+// 处理文本回复
 func (h *BotHandler) handleTextReply(ctx context.Context, b *bot.Bot, update *models.Update) {
 	userID := update.Message.From.ID
 	session, exists := h.Sessions[userID]
 
-	// 1. 如果没有会话，或者状态不对，说明用户可能在瞎聊，直接忽略
-	if !exists || session.State != StateWaitingTitle {
+	// 1. 如果没有会话
+	if !exists {
 		return
 	}
 
-	text := update.Message.Text
+    text := update.Message.Text
 
-	if text == "/no" {
-		// 用户确认使用原标题
+    // ============================================================
+    // 兼容逻辑：如果用户点了旧的键盘 (TGC-SFW / TGC-NSFW)
+    // 即使在 WaitingTitle 阶段，我们也允许直接通过这个跳过
+    // 或者在 WaitingTag 阶段响应这个文本
+    // ============================================================
+    if text == "TGC-SFW" || text == "TGC-NSFW" || text == "TG-SFW" || text == "TG-NSFW" {
+        // 如果当前是 WaitingTag 或者 WaitingTitle (防止用户手快直接点了旧键盘)
+        // 我们直接把它当做选择了标签处理
+        tag := ""
+        if text == "TGC-SFW" || text == "TG-SFW" {
+            tag = "#TGC #SFW"
+        } else {
+            tag = "#TGC #NSFW #R18"
+        }
+        
+        h.processForwardUpload(ctx, b, update.Message.Chat.ID, session, tag)
+        delete(h.Sessions, userID)
+        
+        // 发送一个“移除键盘”的消息，彻底把那个烦人的旧键盘清掉
+        b.SendMessage(ctx, &bot.SendMessageParams{
+            ChatID: update.Message.Chat.ID,
+            Text:   "✅ 识别到标签，已上传喵！（旧键盘已移除）",
+            ReplyMarkup: &models.ReplyKeyboardRemove{}, // 👈 这里是关键，清除旧键盘
+        })
+        return
+    }
+
+    // 2. 如果状态不对（比如已经结束了），忽略
+    if session.State != StateWaitingTitle {
+        return
+    }
+
+    // 3. 处理 /no 和 /title 指令
+	if text == "/no" || strings.EqualFold(text, "no") { // 兼容大小写 no
+		// 确认使用原标题
 	} else if strings.HasPrefix(text, "/title ") {
-        // 用户修改标题
 		newTitle := strings.TrimSpace(strings.TrimPrefix(text, "/title "))
 		if newTitle != "" {
 			session.Caption = newTitle
@@ -175,6 +206,7 @@ func (h *BotHandler) handleTextReply(ctx context.Context, b *bot.Bot, update *mo
 		},
 	}
 
+    // 发送带有 Inline 按钮的消息
 	b.SendMessage(ctx, &bot.SendMessageParams{
 		ChatID:      update.Message.Chat.ID,
 		Text:        fmt.Sprintf("✅ 狗修金,标题确认好了喵~: \n%s\n\n请主人狠狠点击下方按钮选择标签,打上只属于主人的标记吧。：", session.Caption),
@@ -182,7 +214,7 @@ func (h *BotHandler) handleTextReply(ctx context.Context, b *bot.Bot, update *mo
 	})
 }
 
-// 处理按钮回调
+// 处理按钮回调 (Inline Button)
 func (h *BotHandler) handleTagCallback(ctx context.Context, b *bot.Bot, update *models.Update) {
 	userID := update.CallbackQuery.From.ID
 	session, exists := h.Sessions[userID]
@@ -209,12 +241,15 @@ func (h *BotHandler) handleTagCallback(ctx context.Context, b *bot.Bot, update *
 		h.processForwardUpload(ctx, b, chatID, session, tag)
 		delete(h.Sessions, userID) // 上传完清除会话
 
-		// ✅ MessageID 字段修复
+		// 编辑原消息，去掉按钮，防止重复点击
 		b.EditMessageText(ctx, &bot.EditMessageTextParams{
 			ChatID:    chatID,
 			MessageID: update.CallbackQuery.Message.MessageID, 
 			Text:      fmt.Sprintf("✅ 已处理: \n%s\n\nTags: %s", session.Caption, tag),
 		})
+        
+        // 【关键】顺便发一条不可见的消息或者小提示，带上 ReplyKeyboardRemove，
+        // 试图清除那个顽固的旧键盘（虽然 Inline 回调里不方便直接发新消息清键盘，但在逻辑上旧键盘应该已经没用了）
 	}
 
 	b.AnswerCallbackQuery(ctx, &bot.AnswerCallbackQueryParams{
@@ -248,29 +283,28 @@ func (h *BotHandler) processForwardUpload(ctx context.Context, b *bot.Bot, chatI
 			Text:   "❌ 图片已发频道，但数据库保存失败，喵~",
 		})
 	} else {
+        // 这里不发消息了，因为 Inline 模式下通常编辑原消息就够了。
+        // 或者你可以选择发一条 "上传成功" 的消息，并带上 RemoveKeyboard
+        /*
 		b.SendMessage(ctx, &bot.SendMessageParams{
 			ChatID: chatID,
 			Text:   "上传成功，喵~ 🐱",
-			ReplyParameters: &models.ReplyParameters{
-				MessageID: session.MessageID,
-			},
+            ReplyMarkup: &models.ReplyKeyboardRemove{}, // 尝试清除旧键盘
 		})
+        */
 	}
 }
 
 // =====================================================================================
-// ✅ 补回被遗漏的公共方法 (ProcessAndSend, PushHistoryToCloud, compressImage)
+// 辅助方法
 // =====================================================================================
 
-// ProcessAndSend 供爬虫模块调用
 func (h *BotHandler) ProcessAndSend(ctx context.Context, imgData []byte, postID, tags, caption, source string, width, height int) {
-	// 1. 先检查内存历史，如果有了就直接跳过
 	if h.DB.History[postID] {
 		log.Printf("⏭️ Skip %s: already in history", postID)
 		return
 	}
 
-	// 2. 检查图片大小，如果超过 9MB 则压缩 (Telegram 限制 10MB)
 	const MaxPhotoSize = 9 * 1024 * 1024 
 	finalData := imgData
 
@@ -284,7 +318,6 @@ func (h *BotHandler) ProcessAndSend(ctx context.Context, imgData []byte, postID,
 		}
 	}
 
-	// 3. 发送到 Telegram
 	params := &bot.SendPhotoParams{
 		ChatID:  h.Cfg.ChannelID,
 		Photo:   &models.InputFileUpload{Filename: source + ".jpg", Data: bytes.NewReader(finalData)},
@@ -302,7 +335,6 @@ func (h *BotHandler) ProcessAndSend(ctx context.Context, imgData []byte, postID,
 	}
 	fileID := msg.Photo[len(msg.Photo)-1].FileID
 
-	// 4. 存入 D1 数据库
 	err = h.DB.SaveImage(postID, fileID, caption, tags, source, width, height)
 	if err != nil {
 		log.Printf("❌ D1 Save Failed: %v", err)
@@ -311,14 +343,12 @@ func (h *BotHandler) ProcessAndSend(ctx context.Context, imgData []byte, postID,
 	}
 }
 
-// PushHistoryToCloud 供爬虫模块或手动调用
 func (h *BotHandler) PushHistoryToCloud() {
 	if h.DB != nil {
 		h.DB.PushHistory()
 	}
 }
 
-// handleSave 手动触发保存
 func (h *BotHandler) handleSave(ctx context.Context, b *bot.Bot, update *models.Update) {
 	userID := update.Message.From.ID
 
