@@ -27,87 +27,111 @@ type YandePost struct {
 
 func StartYande(ctx context.Context, cfg *config.Config, db *database.D1Client, botHandler *telegram.BotHandler) {
 	client := resty.New()
-
 	// ✅ 1. 设置超时为 90秒
 	client.SetTimeout(90 * time.Second)
-
 	client.SetRetryCount(3)
 	client.SetRetryWaitTime(4 * time.Second)
-
 	// ✅ 3. 伪装 User-Agent 为 Chrome 浏览器
 	client.SetHeader("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+
+	// 🛠️ 预处理：将标签字符串按逗号分割成多个任务组
+	// 例如: "tag1+order:score, tag2+order:score" -> ["tag1+order:score", " tag2+order:score"]
+	tagGroups := strings.Split(cfg.YandeTags, ",")
 
 	for {
 		select {
 		case <-ctx.Done():
 			return
 		default:
-			log.Println("🔍 Checking Yande...")
-			url := fmt.Sprintf("https://yande.re/post.json?limit=%d&tags=%s", cfg.YandeLimit, cfg.YandeTags)
+			log.Println("🔄 Starting Yande Loop...")
 
-			resp, err := client.R().Get(url)
-			if err != nil {
-				log.Printf("Yande API Error: %v", err)
-				time.Sleep(1 * time.Minute)
-				continue
-			}
-
-			var posts []YandePost
-			if err := json.Unmarshal(resp.Body(), &posts); err != nil {
-				log.Printf("Yande JSON Error: %v", err)
-				time.Sleep(1 * time.Minute)
-				continue
-			}
-
-			processedInLoop := make(map[int]bool)
-
-			for _, post := range posts {
-				if processedInLoop[post.ID] {
+			// 🔄 遍历每一组标签任务
+			for _, tags := range tagGroups {
+				currentTags := strings.TrimSpace(tags)
+				if currentTags == "" {
 					continue
 				}
 
-				pid := fmt.Sprintf("yande_%d", post.ID)
-				if db.CheckExists(pid) {
+				log.Printf("🔍 Checking Yande Tags: [%s] ...", currentTags)
+
+				// 构造 URL，使用当前这组标签
+				url := fmt.Sprintf("https://yande.re/post.json?limit=%d&tags=%s", cfg.YandeLimit, currentTags)
+
+				resp, err := client.R().Get(url)
+				if err != nil {
+					log.Printf("Yande API Error (%s): %v", currentTags, err)
+					time.Sleep(10 * time.Second) // 出错后小憩
 					continue
 				}
 
-				targetID := post.ID
-				if post.ParentID != 0 {
-					targetID = post.ParentID
+				var posts []YandePost
+				if err := json.Unmarshal(resp.Body(), &posts); err != nil {
+					log.Printf("Yande JSON Error (%s): %v", currentTags, err)
+					time.Sleep(10 * time.Second)
+					continue
 				}
 
-				// ✅ 改动1：改用 fetchFamilyWithParent 确保包含父图
-				familyPosts := fetchFamilyWithParent(client, targetID)
-				if len(familyPosts) == 0 {
-					// 兜底：如果 API 查不到，至少处理自己
-					familyPosts = []YandePost{post}
+				if len(posts) == 0 {
+					log.Printf("⚠️ No posts found for tags: %s", currentTags)
+					continue
 				}
 
-				// 处理单图或套图
-				if len(familyPosts) == 1 {
-					p := familyPosts[0]
-					processSingleImage(ctx, client, p, db, botHandler)
-					processedInLoop[p.ID] = true
-					// 单图也存入历史，防止重复
-					db.History[fmt.Sprintf("yande_%d", p.ID)] = true
-				} else {
-					// ✅ 改动2：传入 targetID (父ID) 用于生成统一格式的 ID
-					processMediaGroup(ctx, client, familyPosts, targetID, db, botHandler)
-					for _, p := range familyPosts {
-						processedInLoop[p.ID] = true
-						// 标记子图为已处理
-						db.History[fmt.Sprintf("yande_%d", p.ID)] = true
+				processedInLoop := make(map[int]bool)
+				for _, post := range posts {
+					if processedInLoop[post.ID] {
+						continue
 					}
+
+					pid := fmt.Sprintf("yande_%d", post.ID)
+					// ✅ 核心去重：先查内存，再查 D1
+					if db.CheckExists(pid) {
+						continue
+					}
+
+					targetID := post.ID
+					if post.ParentID != 0 {
+						targetID = post.ParentID
+					}
+
+					// ✅ 改动1：改用 fetchFamilyWithParent 确保包含父图
+					familyPosts := fetchFamilyWithParent(client, targetID)
+					if len(familyPosts) == 0 {
+						// 兜底：如果 API 查不到，至少处理自己
+						familyPosts = []YandePost{post}
+					}
+
+					// 处理单图或套图
+					if len(familyPosts) == 1 {
+						p := familyPosts[0]
+						processSingleImage(ctx, client, p, db, botHandler)
+						processedInLoop[p.ID] = true
+						// 单图也存入历史，防止重复
+						db.History[fmt.Sprintf("yande_%d", p.ID)] = true
+					} else {
+						// ✅ 改动2：传入 targetID (父ID) 用于生成统一格式的 ID
+						processMediaGroup(ctx, client, familyPosts, targetID, db, botHandler)
+						for _, p := range familyPosts {
+							processedInLoop[p.ID] = true
+							// 标记子图为已处理
+							db.History[fmt.Sprintf("yande_%d", p.ID)] = true
+						}
+					}
+					
+					// ✅ 每处理完一组图（无论是单张还是套图），立即保存历史到云端
+					// 避免程序意外中断导致重复
+					db.PushHistory()
+					
+					// 处理完一张/组图后稍微休息一下，避免刷屏
+					time.Sleep(3 * time.Second)
 				}
 
-				// ✅ 【关键修正】每处理完一组图，立即保存历史到云端
-
-				time.Sleep(3 * time.Second)
+				// ✅ 一组标签任务跑完后，休息 10 秒再跑下一组标签
+				log.Printf("✅ Task [%s] finished. Cooldown 10s...", currentTags)
+				time.Sleep(10 * time.Second)
 			}
 
-			db.PushHistory()
-
-			log.Println("😴 Yande Done. Sleeping 80m...") // Log 文字修正，与下面一致
+			// ✅ 所有标签组都轮询了一遍，开始长睡眠
+			log.Println("😴 All Yande Tasks Done. Sleeping 80m...") 
 			time.Sleep(80 * time.Minute)
 		}
 	}
