@@ -63,7 +63,7 @@ func (h *BotHandler) ProcessAndSend(ctx context.Context, imgData []byte, postID,
 
 	// 2. 检查图片大小，如果超过 9MB 则压缩 (Telegram 限制 10MB)
 	const MaxPhotoSize = 9 * 1024 * 1024 
-    shouldCompress := int64(len(imgData)) > MaxPhotoSize || (width > 9800 || height > 9800)
+    shouldCompress := int64(len(imgData)) > MaxPhotoSize || (width > 9500 || height > 9500)
 	finalData := imgData
 
     if shouldCompress {
