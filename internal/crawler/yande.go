@@ -107,8 +107,8 @@ func StartYande(ctx context.Context, cfg *config.Config, db *database.D1Client, 
 
 			db.PushHistory()
 
-			log.Println("😴 Yande Done. Sleeping 90m...") // Log 文字修正，与下面一致
-			time.Sleep(90 * time.Minute)
+			log.Println("😴 Yande Done. Sleeping 80m...") // Log 文字修正，与下面一致
+			time.Sleep(80 * time.Minute)
 		}
 	}
 }
