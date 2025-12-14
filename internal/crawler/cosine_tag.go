@@ -161,8 +161,8 @@ func StartCosineTag(ctx context.Context, cfg *config.Config, db *database.D1Clie
 			}
 
 			// 爬完一轮休息 4 小时
-			log.Println("😴 Cosine Crawler Cycle Done. Sleeping 60 min...")
-			time.Sleep(60 * time.Minute)
+			log.Println("😴 Cosine Crawler Cycle Done. Sleeping 2 h...")
+			time.Sleep(2 * time.Hour)
 		}
 	}
 }
