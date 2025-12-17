@@ -72,15 +72,15 @@ func (d *D1Client) PushHistory() {
 }
 
 // SaveImage 支持 width 和 height
-func (d *D1Client) SaveImage(postID, fileID, caption, tags, source string, width, height int) error {
-	url := fmt.Sprintf("https://api.cloudflare.com/client/v4/accounts/%s/d1/database/%s/query", 
+func (d *D1Client) SaveImage(postID, fileID, originID, caption, tags, source string, width, height int) error {
+	url := fmt.Sprintf("https://api.cloudflare.com/client/v4/accounts/%s/d1/database/%s/query",
 		d.cfg.CF_AccountID, d.cfg.D1_DatabaseID)
 	
 	finalTags := fmt.Sprintf("%s %s", tags, source)
 	
 	// ⚠️ 请确保你在 D1 执行了: ALTER TABLE images ADD COLUMN width INTEGER; ALTER TABLE images ADD COLUMN height INTEGER;
-	sql := "INSERT OR IGNORE INTO images (id, file_name, caption, tags, created_at, width, height) VALUES (?, ?, ?, ?, ?, ?, ?)"
-	params := []interface{}{postID, fileID, caption, finalTags, time.Now().Unix(), width, height}
+	sql := "INSERT OR IGNORE INTO images (id, file_name, origin_id, caption, tags, created_at, width, height) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
+	params := []interface{}{postID, fileID, originID, caption, finalTags, time.Now().Unix(), width, height}
 	
 	body := map[string]interface{}{
 		"sql":    sql,
