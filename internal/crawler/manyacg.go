@@ -23,6 +23,7 @@ type ManyACGResponse struct {
 			Name string `json:"name"`
 		} `json:"artist"`
 		Pictures []struct {
+			ID     string `json:"id"`
 			Regular string `json:"regular"`
 			Width   int    `json:"width"` 
 			Height  int    `json:"height"` 
@@ -74,7 +75,7 @@ func StartManyACG(ctx context.Context, cfg *config.Config, db *database.D1Client
 					}
 					
 					pic := item.Pictures[0] // 拿第一张图
-					imgURL := pic.Regular
+					imgURL := fmt.Sprintf("https://api.manyacg.top/v1/picture/file/%s", pic.ID)
 					
 					// ✅ 直接从 JSON 获取宽高
 					width := pic.Width
