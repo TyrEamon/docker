@@ -5,11 +5,12 @@ import (
 	"context"
 	"fmt"
 	"image"
-	"image/jpeg" // ✅ 必须加，用于压缩
-	_ "image/png" // ✅ 必须加，支持 PNG 解码
+	"image/jpeg" 
+	_ "image/png" 
 	"log"
 	"my-bot-go/internal/config"
 	"my-bot-go/internal/database"
+	"strings"
 
 	"github.com/go-telegram/bot"
 	"github.com/go-telegram/bot/models"
@@ -20,33 +21,58 @@ type BotHandler struct {
 	API *bot.Bot
 	Cfg *config.Config
 	DB  *database.D1Client
+	// ✅ 新增：转发会话状态
+    Forwarding      bool             
+    ForwardTitle    string          
+    ForwardPreview  *models.Message  
+    ForwardOriginal *models.Message 
 }
 
 func NewBot(cfg *config.Config, db *database.D1Client) (*BotHandler, error) {
-	opts := []bot.Option{
-		bot.WithDefaultHandler(func(ctx context.Context, b *bot.Bot, update *models.Update) {
-		}),
-	}
+    h := &BotHandler{Cfg: cfg, DB: db}
 
-	b, err := bot.New(cfg.BotToken, opts...)
-	if err != nil {
-		return nil, err
-	}
-	
-	h := &BotHandler{API: b, Cfg: cfg, DB: db}
-	
-	// ✅ 注册 /save 命令
-	b.RegisterHandler(bot.HandlerTypeMessageText, "/save", bot.MatchTypeExact, h.handleSave)
+    opts := []bot.Option{
+        bot.WithDefaultHandler(func(ctx context.Context, b *bot.Bot, update *models.Update) {
+            if update.Message == nil {
+                return
+            }
+            // 只有在 forward 模式下才收集预览/原图
+            if h.Forwarding {
+                if len(update.Message.Photo) > 0 && h.ForwardPreview == nil {
+                    h.ForwardPreview = update.Message
+                    log.Printf("🖼 收到预览图消息: %d", update.Message.ID)
+                }
+                if update.Message.Document != nil && h.ForwardOriginal == nil {
+                    h.ForwardOriginal = update.Message
+                    log.Printf("📄 收到原图文件消息: %d", update.Message.ID)
+                }
+            }
+        }),
+    }
 
-	// 其他 Handlers
-	b.RegisterHandler(bot.HandlerTypeMessageText, "", bot.MatchTypePrefix, h.handleManual)
-	b.RegisterHandler(bot.HandlerTypeMessageText, "", bot.MatchTypePrefix, func(ctx context.Context, b *bot.Bot, update *models.Update) {
-		if update.Message != nil && len(update.Message.Photo) > 0 {
-			h.handleManual(ctx, b, update)
-		}
-	})
+    b, err := bot.New(cfg.BotToken, opts...)
+    if err != nil {
+        return nil, err
+    }
 
-	return h, nil
+    h.API = b
+
+    // ✅ /save
+    b.RegisterHandler(bot.HandlerTypeMessageText, "/save", bot.MatchTypeExact, h.handleSave)
+
+    // ✅ 新增：/forward_start 和 /forward_end
+    b.RegisterHandler(bot.HandlerTypeMessageText, "/forward_start", bot.MatchTypePrefix, h.handleForwardStart)
+    b.RegisterHandler(bot.HandlerTypeMessageText, "/forward_end",   bot.MatchTypeExact,  h.handleForwardEnd)
+
+    // ✅ 保留原来的手动转存逻辑（老的转发方式）
+    b.RegisterHandler(bot.HandlerTypeMessageText, "", bot.MatchTypePrefix, h.handleManual)
+    b.RegisterHandler(bot.HandlerTypeMessageText, "", bot.MatchTypePrefix, func(ctx context.Context, b *bot.Bot, update *models.Update) {
+        if update.Message != nil && len(update.Message.Photo) > 0 {
+            h.handleManual(ctx, b, update)
+        }
+    })
+
+    return h, nil
 }
 
 func (h *BotHandler) Start(ctx context.Context) {
@@ -67,12 +93,10 @@ func (h *BotHandler) ProcessAndSend(ctx context.Context, imgData []byte, postID,
 	finalData := imgData
 
     if shouldCompress {
-        // 提示信息改一下，说明原因
         log.Printf("⚠️ Image %s needs processing (Size: %.2f MB, Dim: %dx%d)...", postID, float64(len(imgData))/1024/1024, width, height)
 	   compressed, err := compressImage(imgData, MaxPhotoSize)
 		if err != nil {
 			log.Printf("❌ Compression failed: %v. Trying original...", err)
-			// 压缩失败，还是试着用原图发一下（虽然大概率失败）
 		} else {
 			finalData = compressed
 		}
@@ -138,7 +162,7 @@ func (h *BotHandler) handleSave(ctx context.Context, b *bot.Bot, update *models.
     }
 
     log.Printf("💾 Manual save triggered by UserID: %d", userID)
-    
+
     if h.DB != nil {
         h.DB.PushHistory()
         b.SendMessage(ctx, &bot.SendMessageParams{
@@ -198,7 +222,135 @@ func (h *BotHandler) handleManual(ctx context.Context, b *bot.Bot, update *model
             MessageID: update.Message.ID,
         },
     })
+ }
+
+// ✅ /forward_start [可选标题]
+func (h *BotHandler) handleForwardStart(ctx context.Context, b *bot.Bot, update *models.Update) {
+    msg := update.Message
+    if msg == nil {
+        return
+    }
+
+    userID := msg.From.ID
+    // 🔒 鉴权：只允许这几个 ID 触发
+    if userID != 8040798522 && userID != 6874581126 {
+        log.Printf("⛔ Unauthorized /forward_start from UserID: %d", userID)
+        return
+    }
+
+    // 解析命令后的文本作为“本次会话标题”
+    text := msg.Text
+    title := ""
+    if len(text) > len("/forward_start") {
+        title = strings.TrimSpace(text[len("/forward_start"):])
+    }
+
+    h.Forwarding = true
+    h.ForwardTitle = title
+    h.ForwardPreview = nil
+    h.ForwardOriginal = nil
+
+    b.SendMessage(ctx, &bot.SendMessageParams{
+        ChatID: msg.Chat.ID,
+        Text:   "✅ 已进入转发模式，请先转发预览图片，再转发原图文件。完成后发送 /forward_end",
+        ReplyParameters: &models.ReplyParameters{
+            MessageID: msg.ID,
+        },
+    })
 }
+
+// ✅ /forward_end：根据规则生成 caption + 存库
+func (h *BotHandler) handleForwardEnd(ctx context.Context, b *bot.Bot, update *models.Update) {
+    msg := update.Message
+    if msg == nil {
+        return
+    }
+
+    if !h.Forwarding {
+        b.SendMessage(ctx, &bot.SendMessageParams{
+            ChatID: msg.Chat.ID,
+            Text:   "ℹ️ 当前没有进行中的转发会话，请先发送 /forward_start",
+        })
+        return
+    }
+
+    // 必须有预览图
+    if h.ForwardPreview == nil || len(h.ForwardPreview.Photo) == 0 {
+        b.SendMessage(ctx, &bot.SendMessageParams{
+            ChatID: msg.Chat.ID,
+            Text:   "❌ 还没有收到预览图片，请先转发一条带图片的消息。",
+        })
+        h.Forwarding = false
+        return
+    }
+
+    // 原图文件可选
+    hasOrigin := h.ForwardOriginal != nil && h.ForwardOriginal.Document != nil
+
+    // 生成 postID
+    postID := fmt.Sprintf("manual_%d", h.ForwardPreview.ID)
+
+    // 计算 caption：
+    // 有自定义标题 -> 用自定义；没有 -> 用预览图 caption；都没有 -> 默认
+    caption := h.ForwardTitle
+    if caption == "" {
+        caption = h.ForwardPreview.Caption
+    }
+    if caption == "" {
+        caption = "MtcACG:TG"
+    }
+
+    // 先把预览图转存到图床频道
+    srcPhoto := h.ForwardPreview.Photo[len(h.ForwardPreview.Photo)-1]
+    fwdMsg, err := b.SendPhoto(ctx, &bot.SendPhotoParams{
+        ChatID:  h.Cfg.ChannelID,
+        Photo:   &models.InputFileString{Data: srcPhoto.FileID},
+        Caption: caption,
+    })
+    if err != nil || len(fwdMsg.Photo) == 0 {
+        log.Printf("❌ Forward preview failed: %v", err)
+        b.SendMessage(ctx, &bot.SendMessageParams{
+            ChatID: msg.Chat.ID,
+            Text:   "❌ 预览图转存失败。",
+        })
+        h.Forwarding = false
+        return
+    }
+    previewFileID := fwdMsg.Photo[len(fwdMsg.Photo)-1].FileID
+    width := srcPhoto.Width
+    height := srcPhoto.Height
+
+    // 决定 originID
+    originFileID := ""
+    if hasOrigin {
+        originFileID = h.ForwardOriginal.Document.FileID
+    }
+
+    // 存入 D1
+    err = h.DB.SaveImage(postID, previewFileID, originFileID, caption, "TG-forward", "TG-C", width, height)
+    if err != nil {
+        log.Printf("❌ D1 Save Failed (forward): %v", err)
+        b.SendMessage(ctx, &bot.SendMessageParams{
+            ChatID: msg.Chat.ID,
+            Text:   "❌ 保存到数据库失败。",
+        })
+    } else {
+        b.SendMessage(ctx, &bot.SendMessageParams{
+            ChatID: msg.Chat.ID,
+            Text:   "✅ 已发布到图床（预览 + 原图）。",
+            ReplyParameters: &models.ReplyParameters{
+                MessageID: msg.ID,
+            },
+        })
+    }
+
+    // 重置会话状态
+    h.Forwarding = false
+    h.ForwardTitle = ""
+    h.ForwardPreview = nil
+    h.ForwardOriginal = nil
+}
+
 
 // compressImage 尝试把图片压缩到指定大小以下
 func compressImage(data []byte, targetSize int64) ([]byte, error) {
