@@ -37,7 +37,7 @@ func StartManyACGSese(ctx context.Context, cfg *config.Config, db *database.D1Cl
 			for i := 0; i < 10; i++ {
 				// 1. 请求跳转接口
 				url := "https://manyacg.top/sese"
-				
+
 				resp, err := client.R().Get(url)
 				if err != nil {
 					log.Printf("❌ ManyACG Sese Request Failed: %v", err)
@@ -51,51 +51,66 @@ func StartManyACGSese(ctx context.Context, cfg *config.Config, db *database.D1Cl
 					continue
 				}
 
-				// 2. 拿到图片数据
-				imgData := resp.Body()
+				// 2. 从最终跳转 URL 里提取 picture id
+				finalURL := resp.RawResponse.Request.URL.String()
+				// 例子: https://cdn.manyacg.top/regular/twitter/.../67009d8d4e0a5f427e928347_regular.webp
+				parts := strings.Split(finalURL, "/")
+				fileName := parts[len(parts)-1] // 67009d8d4e0a5f427e928347_regular.webp
+
+				// 去掉结尾的 "_regular..."，只保留中间那段 id
+				idPart := fileName
+				if idx := strings.Index(idPart, "_regular"); idx != -1 {
+					idPart = idPart[:idx]
+				}
+
+				// 3. 使用原图接口下载真正原图
+				originURL := fmt.Sprintf("https://api.manyacg.top/v1/picture/file/%s", idPart)
+				originResp, err := client.R().Get(originURL)
+				if err != nil || originResp.StatusCode() != 200 {
+					log.Printf("❌ Sese Origin Download Failed: %v (status=%d)", err, originResp.StatusCode())
+					continue
+				}
+
+				// 4. 拿到原图数据
+				imgData := originResp.Body()
 				if len(imgData) == 0 {
 					continue
 				}
 
-				// 3. 解析宽高
+				// 5. 解析宽高
 				imgConfig, format, err := image.DecodeConfig(bytes.NewReader(imgData))
 				if err != nil {
 					// log.Printf("⚠️ Sese Decode Failed: %v", err)
-					continue 
+					continue
 				}
 				width := imgConfig.Width
 				height := imgConfig.Height
 
-				// 4. 生成唯一 ID (sese_文件名)
-				finalURL := resp.RawResponse.Request.URL.String()
-				parts := strings.Split(finalURL, "/")
-				fileName := parts[len(parts)-1] 
-				
+				// 6. 生成唯一 ID (sese_文件名)
 				pid := fmt.Sprintf("sese_%s", fileName)
 
-				// 5. 查重
+				// 7. 查重
 				if db.CheckExists(pid) {
-					// 遇到重复的就跳过，不计入成功次数，直接继续下一次循环
-					// 也可以选择在这里 i-- 强行凑够10张，但容易死循环，建议直接跳过
 					time.Sleep(1 * time.Second)
 					continue
 				}
 
-				// 6. 构造数据
+				// 8. 构造数据
 				title := "MtcACG: SESE"
-				tagsStr := "#R18 #Sese #ManyACG" 
-				caption := fmt.Sprintf("%s\nFormat: %s (%dx%d)\nTags: %s", 
+				tagsStr := "#R18 #Sese #ManyACG"
+				caption := fmt.Sprintf("%s\nFormat: %s (%dx%d)\nTags: %s",
 					title, strings.ToUpper(format), width, height, tagsStr)
 
 				log.Printf("⬇️ Got Sese [%d/10]: %s (%dx%d)", i+1, fileName, width, height)
 
-				// 7. 发送并保存
+				// 9. 发送并保存（用原图数据）
 				botHandler.ProcessAndSend(ctx, imgData, pid, tagsStr, caption, "manyacg_sese", width, height)
 				db.PushHistory()
 
 				// 每张图之间间隔 3 秒，防止 Telegram 发太快限流
 				time.Sleep(3 * time.Second)
 			}
+
 
 			// ✅ 批次结束后，休息 10 分钟
 			log.Println("😴 Sese Batch Done. Sleeping 30m...")
