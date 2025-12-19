@@ -43,6 +43,12 @@ opts := []bot.Option{
             if len(update.Message.Photo) > 0 && h.ForwardPreview == nil {
                 h.ForwardPreview = update.Message
                 log.Printf("🖼 收到预览(Photo): %d", update.Message.ID)
+                // 添加提示
+                b.SendMessage(ctx, &bot.SendMessageParams{
+                    ChatID: update.Message.Chat.ID,
+                    Text:   "✅ 已获取预览图，请发送原图文件。",
+                    ReplyParameters: &models.ReplyParameters{MessageID: update.Message.ID},
+                  })
                 return
             }
 
@@ -52,6 +58,12 @@ opts := []bot.Option{
                 if h.ForwardPreview == nil {
                     h.ForwardPreview = update.Message
                     log.Printf("📄 收到预览(Document): %d", update.Message.ID)
+					        // 添加提示
+                    b.SendMessage(ctx, &bot.SendMessageParams{
+                        ChatID: update.Message.Chat.ID,
+                        Text:   "✅ 已获取预览图，请发送原图文件。",
+                        ReplyParameters: &models.ReplyParameters{MessageID: update.Message.ID},
+                      })
                 }
                 
                 // 如果 Original 是空（且不是同一个消息），它也是 Original
@@ -60,6 +72,11 @@ opts := []bot.Option{
                 if h.ForwardOriginal == nil && h.ForwardPreview != update.Message {
                     h.ForwardOriginal = update.Message
                     log.Printf("📄 收到原图(Document): %d", update.Message.ID)
+					// 添加提示
+                    b.SendMessage(ctx, &bot.SendMessageParams{
+                        ChatID: update.Message.Chat.ID,
+                        Text:   "✅ 已获取原图。",
+                        ReplyParameters: &models.ReplyParameters{MessageID: update.Message.ID},
                 }
             }
         }
