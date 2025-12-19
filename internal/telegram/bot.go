@@ -31,43 +31,24 @@ type BotHandler struct {
 func NewBot(cfg *config.Config, db *database.D1Client) (*BotHandler, error) {
     h := &BotHandler{Cfg: cfg, DB: db}
 
-opts := []bot.Option{
-    bot.WithDefaultHandler(func(ctx context.Context, b *bot.Bot, update *models.Update) {
-        if update.Message == nil {
-            return
-        }
-
-        if !h.Forwarding {
-            return
-        }
-
-        msg := update.Message
-
-        // 日志看一下到底收到什么
-        log.Printf("DefaultHandler: msgID=%d hasPhoto=%v hasDoc=%v",
-            msg.ID, len(msg.Photo) > 0, msg.Document != nil)
-
-        // 先确定预览，再确定原图
-        if h.ForwardPreview == nil {
-            if len(msg.Photo) > 0 {
-                h.ForwardPreview = msg
-                log.Printf("🖼 记录为预览图(Photo): %d", msg.ID)
+    opts := []bot.Option{
+        bot.WithDefaultHandler(func(ctx context.Context, b *bot.Bot, update *models.Update) {
+            if update.Message == nil {
                 return
             }
-            if msg.Document != nil {
-                h.ForwardPreview = msg
-                log.Printf("🖼 记录为预览图(Document): %d", msg.ID)
-                return
+            // 只有在 forward 模式下才收集预览/原图
+            if h.Forwarding {
+                if len(update.Message.Photo) > 0 && h.ForwardPreview == nil {
+                    h.ForwardPreview = update.Message
+                    log.Printf("🖼 收到预览图消息: %d", update.Message.ID)
+                }
+                if update.Message.Document != nil && h.ForwardOriginal == nil {
+                    h.ForwardOriginal = update.Message
+                    log.Printf("📄 收到原图文件消息: %d", update.Message.ID)
+                }
             }
-        }
-
-        // 预览已经有了，再来一条带 Document 的，当原图
-        if h.ForwardOriginal == nil && msg.Document != nil {
-            h.ForwardOriginal = msg
-            log.Printf("📄 记录为原图文件: %d", msg.ID)
-        }
-    }),
-}
+        }),
+    }
 
     b, err := bot.New(cfg.BotToken, opts...)
     if err != nil {
@@ -301,8 +282,8 @@ func (h *BotHandler) handleForwardEnd(ctx context.Context, b *bot.Bot, update *m
         return
     }
 
-    // 必须有预览图（Photo 或 Document 都算）
-    if h.ForwardPreview == nil {
+    // 必须有预览图
+    if h.ForwardPreview == nil || len(h.ForwardPreview.Photo) == 0 {
         b.SendMessage(ctx, &bot.SendMessageParams{
             ChatID: msg.Chat.ID,
             Text:   "❌ 还没有收到预览图片，请先转发一条带图片的消息。",
@@ -327,53 +308,25 @@ func (h *BotHandler) handleForwardEnd(ctx context.Context, b *bot.Bot, update *m
         caption = "MtcACG:TG"
     }
 
-    // 先把预览图转存到图床频道（兼容 Photo / Document）
-    var previewFileID string
-    var width, height int
-
-    if len(h.ForwardPreview.Photo) > 0 {
-        // 预览是 Photo
-        srcPhoto := h.ForwardPreview.Photo[len(h.ForwardPreview.Photo)-1]
-        fwdMsg, err := b.SendPhoto(ctx, &bot.SendPhotoParams{
-            ChatID:  h.Cfg.ChannelID,
-            Photo:   &models.InputFileString{Data: srcPhoto.FileID},
-            Caption: caption,
+    // 先把预览图转存到图床频道
+    srcPhoto := h.ForwardPreview.Photo[len(h.ForwardPreview.Photo)-1]
+    fwdMsg, err := b.SendPhoto(ctx, &bot.SendPhotoParams{
+        ChatID:  h.Cfg.ChannelID,
+        Photo:   &models.InputFileString{Data: srcPhoto.FileID},
+        Caption: caption,
+    })
+    if err != nil || len(fwdMsg.Photo) == 0 {
+        log.Printf("❌ Forward preview failed: %v", err)
+        b.SendMessage(ctx, &bot.SendMessageParams{
+            ChatID: msg.Chat.ID,
+            Text:   "❌ 预览图转存失败。",
         })
-        if err != nil || len(fwdMsg.Photo) == 0 {
-            log.Printf("❌ Forward preview failed: %v", err)
-            b.SendMessage(ctx, &bot.SendMessageParams{
-                ChatID: msg.Chat.ID,
-                Text:   "❌ 预览图转存失败。",
-            })
-            h.Forwarding = false
-            return
-        }
-        previewFileID = fwdMsg.Photo[len(fwdMsg.Photo)-1].FileID
-        width = srcPhoto.Width
-        height = srcPhoto.Height
-    } else if h.ForwardPreview.Document != nil {
-        // 预览是 Document，就按文件再发一次
-        srcDoc := h.ForwardPreview.Document
-        fwdMsg, err := b.SendDocument(ctx, &bot.SendDocumentParams{
-            ChatID: h.Cfg.ChannelID,
-            Document: &models.InputFileString{
-                Data: srcDoc.FileID,
-            },
-            Caption: caption,
-        })
-        if err != nil || fwdMsg.Document == nil {
-            log.Printf("❌ Forward preview(doc) failed: %v", err)
-            b.SendMessage(ctx, &bot.SendMessageParams{
-                ChatID: msg.Chat.ID,
-                Text:   "❌ 预览图转存失败。",
-            })
-            h.Forwarding = false
-            return
-        }
-        previewFileID = fwdMsg.Document.FileID
-        width = 0
-        height = 0
+        h.Forwarding = false
+        return
     }
+    previewFileID := fwdMsg.Photo[len(fwdMsg.Photo)-1].FileID
+    width := srcPhoto.Width
+    height := srcPhoto.Height
 
     // 决定 originID
     originFileID := ""
