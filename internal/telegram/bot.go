@@ -48,7 +48,7 @@ opts := []bot.Option{
                     ChatID: update.Message.Chat.ID,
                     Text:   "✅ 已获取预览图，请发送原图文件。",
                     ReplyParameters: &models.ReplyParameters{MessageID: update.Message.ID},
-                  })
+                })
                 return
             }
 
@@ -58,30 +58,19 @@ opts := []bot.Option{
                 if h.ForwardPreview == nil {
                     h.ForwardPreview = update.Message
                     log.Printf("📄 收到预览(Document): %d", update.Message.ID)
-					        // 添加提示
+                    // 添加提示
                     b.SendMessage(ctx, &bot.SendMessageParams{
                         ChatID: update.Message.Chat.ID,
                         Text:   "✅ 已获取预览图，请发送原图文件。",
                         ReplyParameters: &models.ReplyParameters{MessageID: update.Message.ID},
-                      })
+                    })
                 }
-                
-                // 如果 Original 是空（且不是同一个消息），它也是 Original
-                // (注意：单文件模式下，同一个消息既充当 Preview 也充当 Original，
-                // 但为了不让 handleForwardEnd 里的逻辑打架，我们在那里会默认取 Preview 的文件ID当 Original)
-                if h.ForwardOriginal == nil && h.ForwardPreview != update.Message {
-                    h.ForwardOriginal = update.Message
-                    log.Printf("📄 收到原图(Document): %d", update.Message.ID)
-					// 添加提示
-                    b.SendMessage(ctx, &bot.SendMessageParams{
-                        ChatID: update.Message.Chat.ID,
-                        Text:   "✅ 已获取原图。",
-                        ReplyParameters: &models.ReplyParameters{MessageID: update.Message.ID},
-                }
+                // ...
             }
         }
     }),
 }
+
     b, err := bot.New(cfg.BotToken, opts...)
     if err != nil {
         return nil, err
