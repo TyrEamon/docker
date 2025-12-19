@@ -225,7 +225,7 @@ func (h *BotHandler) handleManual(ctx context.Context, b *bot.Bot, update *model
 
     b.SendMessage(ctx, &bot.SendMessageParams{
         ChatID: update.Message.Chat.ID,
-        Text:   "✅ Saved to D1!",
+        Text:   "✅ handleManual Saved to D1!",
         ReplyParameters: &models.ReplyParameters{
             MessageID: update.Message.ID,
         },
