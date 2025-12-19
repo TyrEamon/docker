@@ -339,15 +339,18 @@ func (h *BotHandler) handleForwardEnd(ctx context.Context, b *bot.Bot, update *m
 	// 2. 准备数据
 	postID := fmt.Sprintf("manual_%d", h.ForwardPreview.ID)
 	
-	// 确定 caption
-	var caption string
-	if h.ForwardOriginal != nil && h.ForwardOriginal.Caption != "" {
-		caption = h.ForwardOriginal.Caption
-	} else if h.ForwardPreview.Caption != "" {
-		caption = h.ForwardPreview.Caption
-	} else {
-		caption = "MtcACG:TG"
-	}
+// 确定 caption
+var caption string
+if h.ForwardTitle != "" {
+    caption = h.ForwardTitle
+} else if h.ForwardOriginal != nil && h.ForwardOriginal.Caption != "" {
+    caption = h.ForwardOriginal.Caption
+} else if h.ForwardPreview.Caption != "" {
+    caption = h.ForwardPreview.Caption
+} else {
+    caption = "MtcACG:TG"
+}
+
 
 	var previewFileID, originFileID string
 	var width, height int
