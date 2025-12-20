@@ -11,7 +11,7 @@ import (
 	"log"
 	"my-bot-go/internal/config"
 	"my-bot-go/internal/database"
-	"my-bot-go/internal/crawler"
+	"my-bot-go/internal/twitter"
 	"net/http"
 	"strings"
 
