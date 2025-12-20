@@ -1,18 +1,13 @@
 package twitter
 
 import (
-    "bytes"
-    "context"
-    "encoding/json"
     "fmt"
     "io"
-    "log"
     "net/http"
     "regexp"
-    "strings"
-
     "github.com/PuerkitoBio/goquery"
 )
+
 
 type Tweet struct {
     ID       string
