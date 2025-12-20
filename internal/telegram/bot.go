@@ -100,7 +100,8 @@ func NewBot(cfg *config.Config, db *database.D1Client) (*BotHandler, error) {
 		}
 		if strings.Contains(update.Message.Text, "twitter.com") || strings.Contains(update.Message.Text, "x.com") {
         // 调用 Twitter 爬虫
-        tweet, err := crawler.GetTweetWithCookie(update.Message.Text, h.Cfg.TwitterCookie)
+        // 调用 Twitter 爬
+		   tweet, err := twitter.GetTweetWithCookie(update.Message.Text, h.Cfg.TwitterCookie)
         if err != nil {
             b.SendMessage(ctx, &bot.SendMessageParams{
                 ChatID: update.Message.Chat.ID,
@@ -110,7 +111,8 @@ func NewBot(cfg *config.Config, db *database.D1Client) (*BotHandler, error) {
         }
 
         // 下载图片
-        imageData, err := crawler.DownloadImage(tweet.ImageURL, h.Cfg.TwitterCookie)
+        // 下载图片
+        imageData, err := twitter.DownloadImage(tweet.ImageURL, h.Cfg.TwitterCookie)
         if err != nil {
             b.SendMessage(ctx, &bot.SendMessageParams{
                 ChatID: update.Message.Chat.ID,
