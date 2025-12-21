@@ -44,6 +44,9 @@ func NewBot(cfg *config.Config, db *database.D1Client) (*BotHandler, error) {
 	// ✅ /save
 	b.RegisterHandler(bot.HandlerTypeMessageText, "/save", bot.MatchTypeExact, h.handleSave)
 
+	// ✅ 新增：监听 Pixiv 链接
+    b.RegisterHandler(bot.HandlerTypeMessageText, "pixiv.net/artworks/", bot.MatchTypeContains, h.handlePixivLink)
+
 	// ✅ 新增：/forward_start 和 /forward_end
 	b.RegisterHandler(bot.HandlerTypeMessageText, "/forward_start", bot.MatchTypePrefix, h.handleForwardStart)
 	b.RegisterHandler(bot.HandlerTypeMessageText, "/forward_end",   bot.MatchTypeExact,  h.handleForwardEnd)
@@ -500,5 +503,89 @@ func compressImage(data []byte, targetSize int64) ([]byte, error) {
 
 		// 否则降低质量继续
 		quality -= 1
+	}
+}
+
+// ---------------------------------------------------------
+// Pixiv Link Handler
+// ---------------------------------------------------------
+func (h *BotHandler) handlePixivLink(ctx context.Context, b *bot.Bot, update *models.Update) {
+	// ✅ 关键修改：如果当前正在转发模式，忽略链接，防止冲突
+	if h.Forwarding {
+		return
+	}
+
+	text := update.Message.Text
+
+	// 1. 提取 ID
+	re := regexp.MustCompile(`artworks/(\d+)`)
+	matches := re.FindStringSubmatch(text)
+	if len(matches) < 2 {
+		return
+	}
+	illustID := matches[1]
+
+	// 提示用户正在处理
+	loadingMsg, _ := b.SendMessage(ctx, &bot.SendMessageParams{
+		ChatID: update.Message.Chat.ID,
+		Text:   "⏳ 正在抓取 Pixiv ID: " + illustID + " ...",
+		ReplyParameters: &models.ReplyParameters{MessageID: update.Message.ID},
+	})
+
+	// 2. 调用新包获取信息
+	illust, err := pixiv.GetIllust(illustID, h.Cfg.PixivPHPSESSID)
+	if err != nil {
+		b.SendMessage(ctx, &bot.SendMessageParams{
+			ChatID: update.Message.Chat.ID,
+			Text:   "❌ 获取失败: " + err.Error(),
+		})
+		return
+	}
+
+	// 3. 循环发送每一张图
+	successCount := 0
+	skippedCount := 0
+
+	for i, page := range illust.Pages {
+		// 下载原图
+		imgData, err := pixiv.DownloadImage(page.Urls.Original, h.Cfg.PixivPHPSESSID)
+		if err != nil {
+			fmt.Printf("❌ Pixiv Download Failed: %v\n", err)
+			continue
+		}
+
+		// 构造唯一的 PID: pixiv_123456_p0
+		pid := fmt.Sprintf("pixiv_%s_p%d", illust.ID, i)
+
+		// 构造标题
+		caption := fmt.Sprintf("Pixiv: %s [P%d/%d]\nArtist: %s\nTags: #%s",
+			illust.Title, i+1, len(illust.Pages),
+			illust.Artist,
+			strings.ReplaceAll(illust.Tags, " ", " #"))
+
+		// 检查数据库去重
+		if h.DB.CheckExists(pid) {
+			skippedCount++
+			continue
+		}
+
+		// 发送
+		h.ProcessAndSend(ctx, imgData, pid, illust.Tags, caption, "pixiv", page.Width, page.Height)
+		successCount++
+
+		// 稍微歇一下
+		time.Sleep(1 * time.Second)
+	}
+
+	// 4. 反馈结果
+	finalText := fmt.Sprintf("✅ 处理完成！\n成功发送: %d 张\n跳过重复: %d 张", successCount, skippedCount)
+	b.SendMessage(ctx, &bot.SendMessageParams{
+		ChatID: update.Message.Chat.ID,
+		Text:   finalText,
+	})
+
+	// 删掉那个“正在抓取”的提示（可选）
+	if loadingMsg != nil {
+		// b.DeleteMessage(ctx, &bot.DeleteMessageParams{ChatID: update.Message.Chat.ID, MessageID: loadingMsg.ID})
 	}
 }
