@@ -11,7 +11,6 @@ import (
 	"log"
 	"my-bot-go/internal/config"
 	"my-bot-go/internal/database"
-	"my-bot-go/internal/twitter"
 	"net/http"
 	"strings"
 
@@ -98,38 +97,6 @@ func NewBot(cfg *config.Config, db *database.D1Client) (*BotHandler, error) {
 			}
 			return
 		}
-		if strings.Contains(update.Message.Text, "twitter.com") || strings.Contains(update.Message.Text, "x.com") {
-        // 调用 Twitter 爬虫
-        // 调用 Twitter 爬
-		   tweet, err := twitter.GetTweetWithCookie(update.Message.Text, h.Cfg.TwitterCookie, h.Cfg.TwitterCt0)
-        if err != nil {
-            b.SendMessage(ctx, &bot.SendMessageParams{
-                ChatID: update.Message.Chat.ID,
-                Text:   "❌ 获取推文失败: " + err.Error(),
-            })
-            return
-        }
-
-        // 下载图片
-        // 下载图片
-        imageData, err := twitter.DownloadImage(tweet.ImageURL, h.Cfg.TwitterCookie)
-        if err != nil {
-            b.SendMessage(ctx, &bot.SendMessageParams{
-                ChatID: update.Message.Chat.ID,
-                Text:   "❌ 下载图片失败: " + err.Error(),
-            })
-            return
-        }
-
-        // 处理和存储
-        h.ProcessAndSend(ctx, imageData, fmt.Sprintf("twitter_%d", tweet.ID), "#twitter#r18", tweet.Text, "twitter", tweet.Width, tweet.Height)
-
-        b.SendMessage(ctx, &bot.SendMessageParams{
-            ChatID: update.Message.Chat.ID,
-            Text:   "✅ 推文图片和标题已存入",
-        })
-        return
-    }
 
 		// 非 forward 模式，走原来的 handleManual
 		if len(update.Message.Photo) > 0 {
