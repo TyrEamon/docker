@@ -119,14 +119,14 @@ func StartCosineTag(ctx context.Context, cfg *config.Config, db *database.D1Clie
 						// 构造标准 DB Key (无后缀)
 						dbKey := fmt.Sprintf("pixiv_%s%s", pidStr, pagePart)
 
-						// 🛡️ 超级去重防御 (同时查带后缀和不带后缀的)
-						if db.History[dbKey] || 
-						   db.History[dbKey+".jpg"] || 
-						   db.History[dbKey+".png"] || 
-						   db.History[dbKey+".webp"] {
-							// log.Printf("♻️ Skip %s (Already in DB)", dbKey)
-							continue
-						}
+                        // 利用 d1.go 中已经实现的 CheckExists 方法，它会穿透查询数据库
+                        if db.CheckExists(dbKey) || 
+                           db.CheckExists(dbKey+".jpg") || 
+                           db.CheckExists(dbKey+".png") || 
+                           db.CheckExists(dbKey+".webp") {
+                            // log.Printf("♻️ Skip %s (Already in DB)", dbKey)
+                            continue
+                        }
 
 						// ================= 下载逻辑 =================
 						
