@@ -49,7 +49,8 @@ type tweetDetailResp struct {
 }
 
 // GetTweetWithCookie 通过 X 的内部 GraphQL API 获取推文信息
-func GetTweetWithCookie(url string, cookie string) (*Tweet, error) {
+// ✅ 修改：增加 ct0 参数，用于通过 API 的 CSRF 校验
+func GetTweetWithCookie(url string, cookie string, ct0 string) (*Tweet, error) {
 	// 1. 从 URL 提取推文 ID
 	re := regexp.MustCompile(`status/(\d+)`)
 	matches := re.FindStringSubmatch(url)
@@ -77,17 +78,7 @@ func GetTweetWithCookie(url string, cookie string) (*Tweet, error) {
 	// 这是一个通用的 Guest Token (长期有效)
 	req.Header.Set("Authorization", "Bearer AAAAAAAAAAAAAAAAAAAAANRILgAAAAAAnNwIzUejRCOuH5E6I8xnZz4puTs%3D1Zv7ttfk8LF81IUq16cHjhLTvJu4FA33AGWWjCpTnA")
 	
-// 💡 健壮的 ct0 提取逻辑
-	var ct0 string
-	cookies := strings.Split(cleanCookie, ";")
-	for _, c := range cookies {
-		c = strings.TrimSpace(c)
-		if strings.HasPrefix(c, "ct0=") {
-			ct0 = strings.TrimPrefix(c, "ct0=")
-			break
-		}
-	}
-	
+	// ✅ 使用传入的 ct0，不再自动提取，防止 403
 	if ct0 != "" {
 		req.Header.Set("x-csrf-token", ct0)
 	}
@@ -107,6 +98,14 @@ func GetTweetWithCookie(url string, cookie string) (*Tweet, error) {
 	var data tweetDetailResp
 	if err := json.NewDecoder(resp.Body).Decode(&data); err != nil {
 		return nil, err
+	}
+
+	// 空指针保护
+	if data.Data.TweetResult.Result.Legacy.FullText == "" && data.Data.TweetResult.Result.NoteTweet.NoteTweetResults.Result.Text == "" {
+		// 有可能遇到敏感内容被折叠，或者是结构体层级不对
+		// 这里简单处理，如果没数据就报错
+		// fmt.Println("Debug JSON:", data) // 调试用
+		return nil, fmt.Errorf("api returned empty result (possibly suspended or sensitive content?)")
 	}
 
 	result := data.Data.TweetResult.Result
@@ -159,7 +158,6 @@ func DownloadImage(imageURL string, cookie string) ([]byte, error) {
     }
     
     // 2. 如果 URL 结尾没有 :orig，就加上它
-    // 这样 https://pbs.twimg.com/media/xxx.jpg 就会变成 https://pbs.twimg.com/media/xxx.jpg:orig
     if !strings.HasSuffix(imageURL, ":orig") {
         imageURL = imageURL + ":orig"
     }
@@ -168,7 +166,6 @@ func DownloadImage(imageURL string, cookie string) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	// 图片下载通常不需要 Cookie，但带个 User-Agent 防盗链检查
 	req.Header.Set("User-Agent", "Mozilla/5.0")
 	
 	client := &http.Client{}
@@ -179,8 +176,6 @@ func DownloadImage(imageURL string, cookie string) ([]byte, error) {
 	defer resp.Body.Close()
 
 	if resp.StatusCode != 200 {
-		// 如果 :orig 下载失败，尝试降级（去掉 :orig 重试）
-		// 但通常 :orig 是最稳的，这里直接报错让用户知道
 		return nil, fmt.Errorf("download status: %d", resp.StatusCode)
 	}
 	return io.ReadAll(resp.Body)
