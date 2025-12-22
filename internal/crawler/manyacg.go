@@ -7,6 +7,7 @@ import (
 	"log"
 	"my-bot-go/internal/config"
 	"my-bot-go/internal/database"
+	"my-bot-go/internal/manyacg"
 	"my-bot-go/internal/telegram"
 	"strings"
 	"time"
@@ -27,6 +28,7 @@ type ManyACGResponse struct {
 			Regular string `json:"regular"`
 			Width   int    `json:"width"` 
 			Height  int    `json:"height"` 
+			Index   int    `json:"index"`
 		} `json:"pictures"`
 		Tags []string `json:"tags"`
 		R18  bool     `json:"r18"`
@@ -62,55 +64,76 @@ func StartManyACG(ctx context.Context, cfg *config.Config, db *database.D1Client
 					continue
 				}
 
-				for _, item := range result.Data {
-					// 构造去重 ID，因为 ID 是字符串，直接用
-					pid := fmt.Sprintf("manyacg_%s", item.ID)
+                for _, item := range result.Data {
+                    // 1) 先检查第一张图（p0）是否存在，避免重复整个图集
+                    firstPid := fmt.Sprintf("mtcacg_%s_p0", item.ID)
 
-                    if db.CheckExists(pid) { // ✅ 改为双重校验
-						continue
-					}
+                    if db.CheckExists(firstPid) {
+                        log.Printf("♻️ MtcACG random skip (already in mtcacg_all): %s [p0 exists]", item.ID)
+                        continue
+                    }
 
-					if len(item.Pictures) == 0 {
-						continue
-					}
-					
-					pic := item.Pictures[0] // 拿第一张图
-					imgURL := fmt.Sprintf("https://api.manyacg.top/v1/picture/file/%s", pic.ID)
-					
-					// ✅ 直接从 JSON 获取宽高
-					width := pic.Width
-					height := pic.Height
+                    if len(item.Pictures) == 0 {
+                        continue
+                    }
 
-					log.Printf("⬇️ Downloading ManyACG: %s (%dx%d)", item.Title, width, height)
+                    // 2) 遍历所有子图
+                    for _, pic := range item.Pictures {
+                        // 构造每张子图的 pid: mtcacg_{artworkID}_p{index}
+                        pid := fmt.Sprintf("mtcacg_%s_p%d", item.ID, pic.Index)
 
-					// 下载图片 (仅为了发送，不需要再分析了)
-					imgResp, err := client.R().Get(imgURL)
-					if err != nil {
-						log.Printf("Failed to download image: %v", err)
-						continue
-					}
+                        // 3) 单张子图去重检查
+                        if db.CheckExists(pid) {
+                            log.Printf("♻️ MtcACG random skip duplicate: %s", pid)
+                            continue
+                        }
 
-					// 构造文案
-					tags := item.Tags
-					if item.R18 {
-						tags = append(tags, "R-18")
-					}
-					tagsStr := strings.Join(tags, " ")
-					caption := fmt.Sprintf("MtcACG: %s\nArtist: %s\nTags: #%s",
-						item.Title,
-						item.Artist.Name,
-						strings.ReplaceAll(tagsStr, " ", " #"),
-					)
+                        // 4) 用 manyacg.DownloadOriginal 下载原图
+                        imgData, err := manyacg.DownloadOriginal(ctx, pic.ID)
+                        if err != nil || len(imgData) == 0 {
+                            log.Printf("❌ MtcACGR original failed: %v (picID=%s)", err, pic.ID)
+                            continue
+                        }
 
-					botHandler.ProcessAndSend(ctx, imgResp.Body(), pid, tagsStr, caption, "manyacg", width, height)
+                        // 直接从 JSON 获取宽高
+                        width := pic.Width
+                        height := pic.Height
 
-					db.PushHistory()
-					time.Sleep(3 * time.Second)
-				}
+                        log.Printf("⬇️ MtcACG random [%s] P%d (%dx%d, pid=%s)", item.Title, pic.Index, width, height, pid)
+
+                        // 构造文案
+                        tags := item.Tags
+                        if item.R18 {
+                            tags = append(tags, "R-18")
+                        }
+                        tagsStr := strings.Join(tags, " ")
+                        hashTags := ""
+                        if len(tags) > 0 {
+                            hashTags = "#" + strings.Join(tags, " #")
+                        }
+
+                        caption := fmt.Sprintf(
+                            "MtcACG: %s [P%d/%d]\nArtist: %s\nTags: %s",
+                            item.Title,
+                            pic.Index+1, len(item.Pictures),
+                            item.Artist.Name,
+                            hashTags,
+                        )
+
+                        // 5) 发送并记录
+                        botHandler.ProcessAndSend(ctx, imgData, pid, tagsStr, caption, "mtcacg", width, height)
+                        db.History[pid] = true
+                        db.PushHistory()
+
+                        time.Sleep(2 * time.Second)
+                    }
+                }
+
+
 				
-				// 每次 API 请求间隔 1 秒
-				time.Sleep(1 * time.Second)
-			}
+				     // 每次 API 请求间隔 1 秒
+			            time.Sleep(1 * time.Second)
+			    }
 
 			log.Println("😴 ManyACG Batch Done. Sleeping 30m...")
 			time.Sleep(30 * time.Minute)
