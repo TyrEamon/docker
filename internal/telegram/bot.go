@@ -128,7 +128,7 @@ func (h *BotHandler) ProcessAndSend(ctx context.Context, imgData []byte, postID,
 		return
 	}
 	const MaxPhotoSize = 9 * 1024 * 1024
-	shouldCompress := int64(len(imgData)) > MaxPhotoSize || (width > 9500 || height > 9500)
+	shouldCompress := int64(len(imgData)) > MaxPhotoSize || (width > 4950 || height > 4950)
 	finalData := imgData
 
 	if shouldCompress {
