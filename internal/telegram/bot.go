@@ -426,12 +426,12 @@ func compressImage(data []byte, targetSize int64) ([]byte, error) {
 	bounds := img.Bounds()
 	width := bounds.Dx()
 	height := bounds.Dy()
-	if width > 9500 || height > 9500 {
+	if width > 4950 || height > 4950 {
 		log.Printf("📏 Resizing image from %dx%d (Too big for TG)", width, height)
 		if width > height {
-			img = resize.Resize(9500, 0, img, resize.Lanczos3)
+			img = resize.Resize(4950, 0, img, resize.Lanczos3)
 		} else {
-			img = resize.Resize(0, 9500, img, resize.Lanczos3)
+			img = resize.Resize(0, 4950, img, resize.Lanczos3)
 		}
 	}
 	log.Printf("📉 Compressing %s image...", format)
