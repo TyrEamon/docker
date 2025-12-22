@@ -46,7 +46,7 @@ func main() {
 	go crawler.StartManyACGAll(ctx, cfg, db, botHandler)
 
 	//go crawler.StartManyACGSese(ctx, cfg, db, botHandler)
-	//go crawler.StartManyACG(ctx, cfg, db, botHandler)
+	go crawler.StartManyACG(ctx, cfg, db, botHandler)
 
 	// 5. 启动 Bot 监听 (阻塞主线程)
 	log.Println("👂 Bot is listening...")
