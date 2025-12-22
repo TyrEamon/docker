@@ -43,7 +43,7 @@ func main() {
 	// 👇 【新增】启动 Cosine Tag 爬虫 🚀
 	go crawler.StartCosineTag(ctx, cfg, db, botHandler)
 
-	go crawler.StartManyACGAll(ctx, cfg, dbClient, botHandler)
+	go crawler.StartManyACGAll(ctx, cfg, db, botHandler)
 
 	//go crawler.StartManyACGSese(ctx, cfg, db, botHandler)
 	//go crawler.StartManyACG(ctx, cfg, db, botHandler)
