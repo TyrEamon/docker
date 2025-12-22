@@ -68,7 +68,7 @@ func StartManyACGAll(ctx context.Context, cfg *config.Config, db *database.D1Cli
 		r18Param = cfg.ManyACGR18Mode
 	}
 
-	log.Println("🚀 Starting ManyACG All Crawler...")
+	log.Println("🚀 Starting MtcACG All Crawler...")
 
 	for {
 		select {
@@ -76,7 +76,7 @@ func StartManyACGAll(ctx context.Context, cfg *config.Config, db *database.D1Cli
 			return
 
 		default:
-			log.Printf("📜 ManyACG list page=%d, r18=%s ...", page, r18Param)
+			log.Printf("📜 MtcACG list page=%d, r18=%s ...", page, r18Param)
 
 			apiURL := "https://api.manyacg.top/v1/artwork/list"
 			resp, err := client.R().
@@ -123,18 +123,19 @@ func StartManyACGAll(ctx context.Context, cfg *config.Config, db *database.D1Cli
 						continue
 					}
 
-					// 1) 唯一 PID: manyacg_{artworkID}_p{index}
-					pid := fmt.Sprintf("manyacg_%s_p%d", aw.ID, pic.Index)
+					// 1) 唯一 PID: mtcacg_{artworkID}_p{index}
+					pid := fmt.Sprintf("mtcacg_%s_p%d", aw.ID, pic.Index)
 
-					// 2) 去重
-					if db.CheckExists(pid) {
-						continue
-					}
+                    if db.CheckExists(pid) {
+                       // 可选：加一行提示
+                      log.Printf("♻️ MtcACG_all skip duplicate: %s", pid)
+                      continue
+                    }
 
 					// 3) 用 picture id 下载原图
 					imgData, err := manyacg.DownloadOriginal(ctx, pic.ID)
 					if err != nil || len(imgData) == 0 {
-						log.Printf("❌ ManyACG original failed: %v (picID=%s)", err, pic.ID)
+						log.Printf("❌ MtcACG original failed: %v (picID=%s)", err, pic.ID)
 						continue
 					}
 
