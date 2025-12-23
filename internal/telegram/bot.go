@@ -18,6 +18,7 @@ import (
 	"my-bot-go/internal/database"
 	"my-bot-go/internal/pixiv"
 	"my-bot-go/internal/manyacg"
+	"my-bot-go/internal/yande"
 
 	"github.com/go-telegram/bot"
 	"github.com/go-telegram/bot/models"
@@ -53,6 +54,10 @@ func NewBot(cfg *config.Config, db *database.D1Client) (*BotHandler, error) {
 
 	// ✅ 新增：监听 ManyACG 链接
     b.RegisterHandler(bot.HandlerTypeMessageText, "manyacg.top/artwork/", bot.MatchTypeContains, h.handleManyacgLink)
+
+	// ✅ 新增：监听 Yande 链接
+    // 匹配如 https://yande.re/post/show/1179601
+    b.RegisterHandler(bot.HandlerTypeMessageText, "yande.re/post/show/", bot.MatchTypeContains, h.handleYandeLink)
 
 	// ✅ /forward_start & /forward_end
 	b.RegisterHandler(bot.HandlerTypeMessageText, "/forward_start", bot.MatchTypePrefix, h.handleForwardStart)
@@ -599,5 +604,94 @@ func (h *BotHandler) handleManyacgLink(ctx context.Context, b *bot.Bot, update *
 			MessageID: loadingMsg.ID,
 		})
 	}
+}
+
+// ✅ 新增处理函数
+func (h *BotHandler) handleYandeLink(ctx context.Context, b *bot.Bot, update *models.Update) {
+    if h.Forwarding {
+        return
+    }
+
+    text := update.Message.Text
+    // 正则匹配 ID
+    re := regexp.MustCompile(`post/show/(\d+)`)
+    matches := re.FindStringSubmatch(text)
+    if len(matches) < 2 {
+        return
+    }
+
+    postID := matches[1]
+    
+    // 构造 PID (先构造出来去查重)
+    // 注意：ID是字符串转int，这里我们假设正则抓到的数字是合法的
+    // 最好还是转一下 int 保持一致性，虽然字符串拼接也行
+    pid := fmt.Sprintf("yande_%s", postID)
+
+    // ✅ 1. 先查重
+    if h.DB.CheckExists(pid) {
+        b.SendMessage(ctx, &bot.SendMessageParams{
+            ChatID:             update.Message.Chat.ID,
+            Text:               "⏭️ 这张图已经发过了 (ID: " + pid + ")，跳过。",
+            ReplyParameters:    &models.ReplyParameters{MessageID: update.Message.ID},
+        })
+        return // 直接结束
+    }
+
+    // 提示正在抓取
+    loadingMsg, _ := b.SendMessage(ctx, &bot.SendMessageParams{
+        ChatID:             update.Message.Chat.ID,
+        Text:               "⏳ 正在抓取 Yande ID: " + postID + " ...",
+        ReplyParameters:    &models.ReplyParameters{MessageID: update.Message.ID},
+    })
+
+    // 2. 获取详情
+    post, err := yande.GetYandePost(postID)
+    if err != nil {
+        b.SendMessage(ctx, &bot.SendMessageParams{
+            ChatID: update.Message.Chat.ID,
+            Text:   "❌ 获取失败: " + err.Error(),
+        })
+        // 删掉 loading 消息
+        if loadingMsg != nil {
+            b.DeleteMessage(ctx, &bot.DeleteMessageParams{ChatID: update.Message.Chat.ID, MessageID: loadingMsg.ID})
+        }
+        return
+    }
+
+    // 3. 下载图片
+    imgURL := yande.SelectBestURL(post)
+    imgData, err := yande.DownloadYandeImage(imgURL)
+    if err != nil {
+        b.SendMessage(ctx, &bot.SendMessageParams{
+            ChatID: update.Message.Chat.ID,
+            Text:   "❌ 下载图片失败: " + err.Error(),
+        })
+        if loadingMsg != nil {
+            b.DeleteMessage(ctx, &bot.DeleteMessageParams{ChatID: update.Message.Chat.ID, MessageID: loadingMsg.ID})
+        }
+        return
+    }
+
+    // 4. 构造发送参数
+    tags := strings.ReplaceAll(post.Tags, " ", " #")
+    caption := fmt.Sprintf("Yande: %d\nSize: %dx%d\nTags: #%s", 
+        post.ID, post.Width, post.Height, tags)
+
+    // 5. 发送并保存
+    h.ProcessAndSend(ctx, imgData, pid, post.Tags, caption, "yande", post.Width, post.Height)
+
+    // 6. 完成反馈
+    if loadingMsg != nil {
+        b.DeleteMessage(ctx, &bot.DeleteMessageParams{
+            ChatID:    update.Message.Chat.ID,
+            MessageID: loadingMsg.ID,
+        })
+    }
+    
+    b.SendMessage(ctx, &bot.SendMessageParams{
+        ChatID: update.Message.Chat.ID,
+        Text:   "✅ 处理完成！",
+        ReplyParameters: &models.ReplyParameters{MessageID: update.Message.ID},
+    })
 }
 
