@@ -35,18 +35,34 @@ func main() {
 
 	// 4. 启动爬虫 (并发运行)
 	go crawler.StartYande(ctx, cfg, db, botHandler)
-	go crawler.StartPixiv(ctx, cfg, db, botHandler)
+	// 5 分钟后启动 Pixiv（偏重，图大）
+    go func() {
+        time.Sleep(5 * time.Minute)
+        crawler.StartPixiv(ctx, cfg, db, botHandler)
+    }()
 	
-	//go crawler.StartDanbooru(ctx, cfg, db, botHandler)
-	//go crawler.StartKemono(ctx, cfg, db, botHandler)
+	///go crawler.StartDanbooru(ctx, cfg, db, botHandler)///
+	///go crawler.StartKemono(ctx, cfg, db, botHandler)///
 
-	// 👇 【新增】启动 Cosine Tag 爬虫 🚀
-	go crawler.StartCosineTag(ctx, cfg, db, botHandler)
+    // 10 分钟后启动 Cosine（也会打到 Pixiv 源）
+    go func() {
+        time.Sleep(10 * time.Minute)
+        crawler.StartCosineTag(ctx, cfg, db, botHandler)
+    }()
 
-	go crawler.StartManyACGAll(ctx, cfg, db, botHandler)
+    // 15 分钟后启动 ManyACG 全站
+    go func() {
+        time.Sleep(15 * time.Minute)
+        crawler.StartManyACGAll(ctx, cfg, db, botHandler)
+    }()
 
-	//go crawler.StartManyACGSese(ctx, cfg, db, botHandler)
-	go crawler.StartManyACG(ctx, cfg, db, botHandler)
+	///go crawler.StartManyACGSese(ctx, cfg, db, botHandler)///
+
+    // 20 分钟后启动 ManyACG random
+    go func() {
+        time.Sleep(20 * time.Minute)
+        crawler.StartManyACG(ctx, cfg, db, botHandler)
+    }()
 
 	// 5. 启动 Bot 监听 (阻塞主线程)
 	log.Println("👂 Bot is listening...")
