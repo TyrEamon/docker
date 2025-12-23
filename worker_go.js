@@ -3,10 +3,8 @@ export default {
     const url = new URL(request.url);
     const path = url.pathname;
 
-// 在处理 '/image/' 路由的地方
 if (path.startsWith('/image/')) {
   const fileId = path.replace('/image/', '');
-  // 获取 dl 参数 (这里拿到的就是 "jpg")
   const dlExt = url.searchParams.get('dl'); 
   return await proxyTelegramImage(fileId, env.BOT_TOKEN, dlExt);
 }
@@ -20,19 +18,13 @@ if (path.startsWith('/image/')) {
         return new Response(JSON.stringify(results), { headers: { 'Content-Type': 'application/json' }});
       }
 
-      // === 进阶搜索优化 ===
       let sql;
       let params = [];
 
       if (q) {
-        // 1. 清洗并拆分关键词
-        // 去掉 # 号，按空格拆分，过滤掉空字符串
         const keywords = q.replace(/#/g, '').trim().split(/\s+/).filter(k => k.length > 0);
 
         if (keywords.length > 0) {
-            // 2. 动态构建 SQL 条件
-            // 对每个关键词生成一个 (tags LIKE ? OR caption LIKE ?) 条件
-            // 并用 AND 连接，表示所有关键词都必须匹配（交集搜索）
             const conditions = keywords.map(() => `(tags LIKE ? OR caption LIKE ?)`).join(' AND ');
             
             sql = `
@@ -42,24 +34,23 @@ if (path.startsWith('/image/')) {
                 LIMIT 20 OFFSET ?
             `;
 
-            // 3. 准备参数数组
-            // 每个关键词需要绑定两次（一次给 tags，一次给 caption）
+            
             keywords.forEach(k => {
-                params.push(`%${k}%`); // 给 tags
-                params.push(`%${k}%`); // 给 caption
+                params.push(`%${k}%`); 
+                params.push(`%${k}%`); 
             });
-            params.push(offset); // 最后加上 offset
+            params.push(offset); 
         } else {
-            // 如果拆分后没有有效关键词（例如只输了空格），回退到默认
+            
             sql = `SELECT * FROM images ORDER BY created_at DESC LIMIT 20 OFFSET ?`;
             params = [offset];
         }
       } else {
-        // 无搜索词情况
+        
         sql = `SELECT * FROM images ORDER BY created_at DESC LIMIT 20 OFFSET ?`;
         params = [offset];
       }
-      // === 优化结束 ===
+      
 
       try {
         const { results } = await env.DB.prepare(sql).bind(...params).all();
@@ -73,7 +64,7 @@ if (path.startsWith('/image/')) {
 
     if (path === '/about') return new Response(htmlAbout(), {headers: {'Content-Type': 'text/html;charset=UTF-8','Cache-Control': 'public, max-age=60'}});
 
-    // 显式处理 /r18，复用主页模板
+    
     if (path === '/r18') return new Response(htmlHome(), { headers: { 'Content-Type': 'text/html;charset=UTF-8','Cache-Control': 'public, max-age=60'}});
 
     return new Response(htmlHome(), { headers: { 'Content-Type': 'text/html;charset=UTF-8','Cache-Control': 'public, max-age=60'}});
@@ -94,7 +85,7 @@ async function proxyTelegramImage(fileId, botToken, dlExt = null) {
     h.set("Cache-Control", "public, max-age=31536000, immutable");
     h.set("Access-Control-Allow-Origin", "*");
 
-    // ✅ 只要有 dl 参数，就强制赋予后缀，文件名就是 FileID.jpg
+    
     if (dlExt) {
         const filename = `${fileId}.${dlExt}`;
         h.set("Content-Disposition", `attachment; filename="${filename}"`);
@@ -106,8 +97,8 @@ async function proxyTelegramImage(fileId, botToken, dlExt = null) {
   }
 }
 
-// 替换原有的 ...
-// 【请完全替换代码最上方的 const SIDEBAR_HTML = ... 】
+
+
 const SIDEBAR_HTML = `
 <!-- 遮罩层 (修正层级 z-[200]) -->
 <div id="sidebar-overlay" onclick="toggleSidebar()" class="fixed inset-0 bg-black/60 z-[200] hidden transition-opacity opacity-0" style="will-change: opacity"></div>
@@ -251,8 +242,6 @@ async function handleDetail(id, env) {
    const imagesJson = JSON.stringify(items.map(x => ({
      id: x.id,
      file: x.file_name,
-  // ✅ 暴力写法：不管你是预览图还是原图，统统加上 ?dl=jpg
-  // 这样下载下来的文件名就是：文件ID.jpg
      download: `/image/${x.origin_id || x.file_name}?dl=jpg`
    })));
 
@@ -667,7 +656,6 @@ function htmlAbout() {
   </html>`;
 }
 
-// 首页：JS 动态 Masonry 版（绝对多列，不再依赖 CSS Columns）
 // 首页：JS 动态 Masonry 版
 function htmlHome() {
   return `<!DOCTYPE html>
