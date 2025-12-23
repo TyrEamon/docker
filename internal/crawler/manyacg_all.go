@@ -200,7 +200,7 @@ func StartManyACGAll(ctx context.Context, cfg *config.Config, db *database.D1Cli
 					db.History[pid] = true
 					db.PushHistory()
 
-					time.Sleep(15 * time.Second)
+					time.Sleep(7 * time.Second)
 				}
 			}
 
