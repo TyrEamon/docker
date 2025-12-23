@@ -71,12 +71,12 @@ if (path.startsWith('/image/')) {
 
     if (path.match(/^\/detail\/(.+)$/)) return await handleDetail(path.match(/^\/detail\/(.+)$/)[1], env);
 
-    if (path === '/about') return new Response(htmlAbout(), {headers: {'Content-Type': 'text/html;charset=UTF-8'}});
+    if (path === '/about') return new Response(htmlAbout(), {headers: {'Content-Type': 'text/html;charset=UTF-8','Cache-Control': 'public, max-age=60'}});
 
     // 显式处理 /r18，复用主页模板
-    if (path === '/r18') return new Response(htmlHome(), { headers: { 'Content-Type': 'text/html;charset=UTF-8' }});
+    if (path === '/r18') return new Response(htmlHome(), { headers: { 'Content-Type': 'text/html;charset=UTF-8','Cache-Control': 'public, max-age=60'}});
 
-    return new Response(htmlHome(), { headers: { 'Content-Type': 'text/html;charset=UTF-8' }});
+    return new Response(htmlHome(), { headers: { 'Content-Type': 'text/html;charset=UTF-8','Cache-Control': 'public, max-age=60'}});
   }
 };
 
@@ -161,7 +161,7 @@ const SIDEBAR_HTML = `
   <!-- Friends/GitHub 链接 -->
   <div class="pt-4 mt-4 border-t border-white/10">
       <p class="px-3 text-xs font-bold text-gray-500 uppercase mb-2">Friends</p>
-      <a href="https://github.com/mtc-acg" target="_blank" class="flex items-center p-3 text-gray-400 hover:text-white hover:bg-white/5 rounded-lg text-sm">
+      <a href="https://github.com/TyrEamon/MtcACG-GO" target="_blank" class="flex items-center p-3 text-gray-400 hover:text-white hover:bg-white/5 rounded-lg text-sm">
          <svg class="w-4 h-4 mr-2" fill="currentColor" viewBox="0 0 24 24"><path fill-rule="evenodd" d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.531 1.032 1.531 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z" clip-rule="evenodd"/></svg>
          GitHub
       </a>
@@ -224,37 +224,37 @@ async function randomImage() {
 
 // 详情页：精简头部（仅保留菜单按钮）+ 侧边栏防透视修复
 async function handleDetail(id, env) {
-  const img = await env.DB.prepare("SELECT * FROM images WHERE id = ?").bind(id).first();
-  if (!img) return new Response("404", { status: 404 });
+   const img = await env.DB.prepare("SELECT * FROM images WHERE id = ?").bind(id).first();
+   if (!img) return new Response("404", { status: 404 });
 
-  let parentId = img.id;
-  const m = img.id.match(/^(.*)_p(\d+)$/);
-  if (m) parentId = m[1];
+   let parentId = img.id;
+   const m = img.id.match(/^(.*)_p(\d+)$/);
+   if (m) parentId = m[1];
 
-  const { results: siblings } = await env.DB
-    .prepare("SELECT * FROM images WHERE id = ? OR id LIKE ? ORDER BY id ASC")
-    .bind(parentId, parentId + "_p%")
-    .all();
+   const { results: siblings } = await env.DB
+     .prepare("SELECT * FROM images WHERE id = ? OR id LIKE ? ORDER BY id ASC")
+     .bind(parentId, parentId + "_p%")
+     .all();
 
-  const { results: randomPosts } = await env.DB
-    .prepare("SELECT * FROM images WHERE id != ? ORDER BY RANDOM() LIMIT 6")
-    .bind(id)
-    .all();
+   const { results: randomPosts } = await env.DB
+     .prepare("SELECT * FROM images WHERE id != ? ORDER BY RANDOM() LIMIT 6")
+     .bind(id)
+     .all();
 
-  const items = siblings.sort((a, b) => a.id.localeCompare(b.id));
-  const currentIndex = Math.max(0, items.findIndex(x => x.id === img.id));
-  const bgUrl = `/image/${img.file_name}`;
-  const title = (img.caption || 'Untitled').split('\n')[0];
-  const tags = (img.tags || '').trim().split(' ').filter(Boolean);
+   const items = siblings.sort((a, b) => a.id.localeCompare(b.id));
+   const currentIndex = Math.max(0, items.findIndex(x => x.id === img.id));
+   const bgUrl = `/image/${img.file_name}`;
+   const title = (img.caption || 'Untitled').split('\n')[0];
+   const tags = (img.tags || '').trim().split(' ').filter(Boolean);
 
 // 在 handleDetail 函数中
-const imagesJson = JSON.stringify(items.map(x => ({
-  id: x.id,
-  file: x.file_name,
+   const imagesJson = JSON.stringify(items.map(x => ({
+     id: x.id,
+     file: x.file_name,
   // ✅ 暴力写法：不管你是预览图还是原图，统统加上 ?dl=jpg
   // 这样下载下来的文件名就是：文件ID.jpg
-  download: `/image/${x.origin_id || x.file_name}?dl=jpg`
-})));
+     download: `/image/${x.origin_id || x.file_name}?dl=jpg`
+   })));
 
 
   // 侧边栏 HTML (背景 bg-[#1a1a1a] 不透明，防止花屏
@@ -532,7 +532,7 @@ const imagesJson = JSON.stringify(items.map(x => ({
     document.addEventListener('keydown', e => { if(e.key === 'ArrowLeft') go(-1); if(e.key === 'ArrowRight') go(1); });
   </script>
 </body>
-</html>`, { headers: { "Content-Type": "text/html;charset=UTF-8" } });
+</html>`, { headers: { "Content-Type": "text/html;charset=UTF-8",'Cache-Control': 'public, max-age=60' } });
 }
 
 function htmlAbout() {
@@ -877,7 +877,6 @@ function htmlHome() {
   
         let colHeights = new Array(colCount).fill(0);
         
-        // 首页屏蔽列表
         const blockKeywords =[
           'R-18', 'NSFW','Hentai','血腥','R18','性爱','性交','淫','乱伦','裸胸','露点',
           '调教','捆绑','触手','高潮','喷水','阿黑颜','颜射','后宫','痴汉','NTR','3P','Boobs',
@@ -889,11 +888,10 @@ function htmlHome() {
           'Garter','Lingerie','Panty','Stockings','ふたなり','輪姦','母子','近親','異種姦','孕ませ','緊縛',
           '奴隷','悪堕ち','精神崩壊','セックス','中出し','顔射','イラマチオ','フェラ','パイズリ','手コキ','潮吹き','絶頂',
           'アヘ顔','全裸','乳首','ペニス','ヴァギナ','クリトリス','近親','触手','レイプ','調教','スカトロ','ふたなり','パンツ下ろし',
-          'TG-forward','yande',
+          'yande',
         ];
 
-        // 里世界展示列表（目前和屏蔽列表一致，你可以按需修改）
-        const r18Keywords = [
+       const r18Keywords = [
           'R-18','NSFW','Hentai','血腥','R18','性爱','性交','淫','乱伦','裸胸','露点',
           '调教','捆绑','触手','高潮','喷水','阿黑颜','颜射','后宫','痴汉','NTR','3P','Boobs',
           'Tits','Nipples','Breast','强暴','做爱','自慰','援交','喷水','Creampie','Cum','Bukkake','Sex','Fuck',
@@ -904,18 +902,14 @@ function htmlHome() {
           'パンツ下ろし','尻揉み','比基尼','裸足','School Swimsuit','アナル尻尾','Maid','Swimsuit','Ass','成人','成人','Pantyhose',
           'Garter','连裤袜','ロリ','Lingerie','Panty','Stockings','yande','ふたなり','輪姦','母子','近親','異種姦','孕ませ','緊縛',
           '奴隷','悪堕ち','精神崩壊','セックス','中出し','顔射','イラマチオ','フェラ','パイズリ','手コキ','潮吹き','絶頂',
-          'アヘ顔','全裸','乳首','ペニス','ヴァギナ','クリトリス','近親','触手','レイプ','調教','スカトロ','ふたなり','TG-forward','yande',
+          'アヘ顔','全裸','乳首','ペニス','ヴァギナ','クリトリス','近親','触手','レイプ','調教','スカトロ','ふたなり','yande',
         ]; 
 
-        // === 1. 新增智能检测函数（防误杀核心）===
-        // 放在 for 循环前面定义
         function checkKeywords(text, keywords) {
           return keywords.some(k => {
             const key = k.toLowerCase();
-            // 如果是纯英文单词且长度 >1 (例如 Ass, Sex)，使用“单词边界”匹配
-            // 注意：这里用了四斜杠 \\\\b 是因为在 Worker 字符串里要转义两次
             if (key.length > 1 && /^[a-z0-9]+$/i.test(key)) {
-               const reg = new RegExp('\\\\b' + key + '\\\\b', 'i'); 
+               const reg = new RegExp('\\b' + key + '\\b', 'i'); 
                return reg.test(text);
             }
             // 中文或特殊符号，保持原来的“包含即匹配”
@@ -925,9 +919,8 @@ function htmlHome() {
 
         const isR18Page = window.location.pathname === '/r18';
 
-        let validCount = 0; // 计数器：记录本页有多少张有效图
+        let validCount = 0;
 
-        // 3. 循环主体
         for (const item of data) {
           const textToCheck = ((item.caption || '') + ' ' + (item.tags || '')).toLowerCase();
           
@@ -942,7 +935,6 @@ function htmlHome() {
 
           if (isHidden) continue;
 
-          // 能走到这里，说明是有效图
           validCount++;
 
           // === ✅ 新增：安全的背景设置逻辑 ===
@@ -988,13 +980,9 @@ function htmlHome() {
         
         offset += data.length;
         
-        // === 修复版：自动补货逻辑 ===
-        if (!isR18Page && hideR18 && validCount < 5 && data.length >= 20) {
-          // 注意 validCount 和 data.length 前面的反斜杠 \
-          console.log(\`Page filtered (valid: \${validCount}/\${data.length}), auto loading next page...\`);          
-            
-            isLoading = false; // <--- 必须加这行！解锁状态！
-            
+        if (validCount < 5 && data.length >= 20) {
+          console.log(\`Page filtered (valid: \${validCount}/\${data.length}), auto loading next page...\`);              
+            isLoading = false;
             setTimeout(() => load(false), 100); 
             return;
         }
