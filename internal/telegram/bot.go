@@ -31,10 +31,12 @@ type BotHandler struct {
 	Cfg             *config.Config
 	DB              *database.D1Client
 	Forwarding      bool
+	ForwardBaseID   string          // 基础ID (例如 manual_1338)	
+	ForwardIndex    int             // 当前是第几张 (0, 1, 2...)
 	ForwardTitle    string
 	ForwardTags     string // ✅ 新增字段
-	ForwardPreview  *models.Message
-	ForwardOriginal *models.Message
+    CurrentPreview  *models.Message
+    CurrentOriginal *models.Message
 }
 
 func NewBot(cfg *config.Config, db *database.D1Client) (*BotHandler, error) {
@@ -66,6 +68,7 @@ func NewBot(cfg *config.Config, db *database.D1Client) (*BotHandler, error) {
 
 	// ✅ /forward_start & /forward_end
 	b.RegisterHandler(bot.HandlerTypeMessageText, "/forward_start", bot.MatchTypePrefix, h.handleForwardStart)
+	b.RegisterHandler(bot.HandlerTypeMessageText, "/forward_continue", bot.MatchTypeExact, h.handleForwardContinue) // 新增
 	b.RegisterHandler(bot.HandlerTypeMessageText, "/forward_end", bot.MatchTypeExact, h.handleForwardEnd)
 
 	// ✅ Default handler
@@ -73,39 +76,47 @@ func NewBot(cfg *config.Config, db *database.D1Client) (*BotHandler, error) {
 		if update.Message == nil {
 			return
 		}
+// 1. 如果处于转发模式，拦截图片
 		if h.Forwarding {
-			if len(update.Message.Photo) > 0 && h.ForwardPreview == nil {
-				h.ForwardPreview = update.Message
-				log.Printf("🖼 收到预览(Photo): %d", update.Message.ID)
+			msg := update.Message
+			
+			// 处理图片 (Preview)
+			if len(msg.Photo) > 0 {
+				h.CurrentPreview = msg
+				// 如果是新的一张，清空可能残留的原图
+				h.CurrentOriginal = nil 
+				
+				log.Printf("🖼 [Forward] 收到 P%d 预览图", h.ForwardIndex)
 				b.SendMessage(ctx, &bot.SendMessageParams{
-					ChatID:          update.Message.Chat.ID,
-					Text:            "✅ 已获取预览图，请发送原图文件。",
-					ReplyParameters: &models.ReplyParameters{MessageID: update.Message.ID},
+					ChatID:          msg.Chat.ID,
+					Text:            fmt.Sprintf("✅ 已获取 P%d 预览图，请发送原图文件(Document)。", h.ForwardIndex),
+					ReplyParameters: &models.ReplyParameters{MessageID: msg.ID},
 				})
 				return
 			}
-			if update.Message.Document != nil {
-				if h.ForwardPreview == nil {
-					h.ForwardPreview = update.Message
-					log.Printf("📄 收到预览(Document): %d", update.Message.ID)
-					b.SendMessage(ctx, &bot.SendMessageParams{
-						ChatID:          update.Message.Chat.ID,
-						Text:            "✅ 已获取预览图，请发送原图文件。",
-						ReplyParameters: &models.ReplyParameters{MessageID: update.Message.ID},
-					})
+
+			// 处理文件 (Original)
+			if msg.Document != nil {
+				if h.CurrentPreview == nil {
+					// 如果没发预览图直接发文件，把文件同时作为预览和原图
+					h.CurrentPreview = msg
+					h.CurrentOriginal = msg
+				} else {
+					h.CurrentOriginal = msg
 				}
-				if h.ForwardOriginal == nil && h.ForwardPreview != update.Message {
-					h.ForwardOriginal = update.Message
-					log.Printf("📄 收到原图(Document): %d", update.Message.ID)
-					b.SendMessage(ctx, &bot.SendMessageParams{
-						ChatID:          update.Message.Chat.ID,
-						Text:            "✅ 已获取原图。",
-						ReplyParameters: &models.ReplyParameters{MessageID: update.Message.ID},
-					})
-				}
+				
+				log.Printf("📄 [Forward] 收到 P%d 原图", h.ForwardIndex)
+				b.SendMessage(ctx, &bot.SendMessageParams{
+					ChatID:          msg.Chat.ID,
+					Text:            fmt.Sprintf("✅ P%d 就绪。\n请输入 /forward_continue 发布并继续下一张\n或 /forward_end 发布并结束。", h.ForwardIndex),
+					ReplyParameters: &models.ReplyParameters{MessageID: msg.ID},
+				})
+				return
 			}
 			return
 		}
+
+		// 2. 非转发模式的手动处理 (handleManual)
 		if len(update.Message.Photo) > 0 {
 			h.handleManual(ctx, b, update)
 		}
@@ -251,25 +262,21 @@ func (h *BotHandler) handleManual(ctx context.Context, b *bot.Bot, update *model
 	})
 }
 
-// ✅ 修改后的 handleForwardStart
+// ==================== 转发/父子图 核心逻辑 ====================
+
+// 1. 开始会话
 func (h *BotHandler) handleForwardStart(ctx context.Context, b *bot.Bot, update *models.Update) {
 	msg := update.Message
-	if msg == nil {
-		return
-	}
 	userID := msg.From.ID
-	if userID != 8040798522 && userID != 6874581126 {
-		log.Printf("⛔ Unauthorized /forward_start from UserID: %d", userID)
+	if userID != 8040798522 && userID != 6874581126 { // 鉴权
 		return
 	}
 
-	// 1. 获取命令后的原始文本
+	// 解析标题和标签
 	rawText := ""
 	if len(msg.Text) > len("/forward_start") {
 		rawText = strings.TrimSpace(msg.Text[len("/forward_start"):])
 	}
-
-	// 2. 智能分离 Title 和 Tags (#)
 	title := rawText
 	tags := ""
 	firstHashIndex := strings.Index(rawText, "#")
@@ -278,154 +285,168 @@ func (h *BotHandler) handleForwardStart(ctx context.Context, b *bot.Bot, update 
 		tags = strings.TrimSpace(rawText[firstHashIndex:])
 	}
 
+	// 初始化状态
 	h.Forwarding = true
+	h.ForwardBaseID = fmt.Sprintf("manual_%d", msg.ID) // 只有 Start 时生成一次 BaseID
+	h.ForwardIndex = 0
 	h.ForwardTitle = title
-	h.ForwardTags = tags // 存起来
-	h.ForwardPreview = nil
-	h.ForwardOriginal = nil
+	h.ForwardTags = tags
+	h.CurrentPreview = nil
+	h.CurrentOriginal = nil
 
-	// 反馈信息
-	info := "✅ 进入转发模式"
-	if title != "" {
-		info += fmt.Sprintf("\n📝 标题: %s", title)
-	}
-	if tags != "" {
-		info += fmt.Sprintf("\n🏷 标签: %s", tags)
-	}
-	info += "\n请发送预览图..."
+	info := fmt.Sprintf("✅ **转发模式已启动**\n🆔 BaseID: `%s`\n📝 标题: %s\n🏷 标签: %s\n\n👉 请发送 **P0 预览图**", 
+		h.ForwardBaseID, title, tags)
 
 	b.SendMessage(ctx, &bot.SendMessageParams{
-		ChatID:          msg.Chat.ID,
-		Text:            info,
-		ReplyParameters: &models.ReplyParameters{MessageID: msg.ID},
+		ChatID:    msg.Chat.ID,
+		Text:      info,
+		ParseMode: models.ParseModeMarkdown,
 	})
 }
 
-// ✅ 修改后的 handleForwardEnd
-func (h *BotHandler) handleForwardEnd(ctx context.Context, b *bot.Bot, update *models.Update) {
-	msg := update.Message
-	if msg == nil {
-		return
-	}
-	if !h.Forwarding {
-		b.SendMessage(ctx, &bot.SendMessageParams{
-			ChatID: msg.Chat.ID,
-			Text:   "ℹ️ 当前没有进行中的转发会话，请先发送 /forward_start",
-		})
-		return
-	}
-	if h.ForwardPreview == nil {
-		b.SendMessage(ctx, &bot.SendMessageParams{
-			ChatID: msg.Chat.ID,
-			Text:   "❌ 还没有收到预览消息，请先转发一条图片或文件。",
-		})
-		h.Forwarding = false
-		return
+// 2. 辅助函数：发布当前缓存的那一张 (BaseID_pX)
+func (h *BotHandler) publishCurrentItem(ctx context.Context, b *bot.Bot, chatID int64) bool {
+	if h.CurrentPreview == nil {
+		b.SendMessage(ctx, &bot.SendMessageParams{ChatID: chatID, Text: "⚠️ 错误：当前没有待发布的图片，无法继续。"})
+		return false
 	}
 
-	postID := fmt.Sprintf("manual_%d", h.ForwardPreview.ID)
+	// 构造 ID: manual_1001_p0
+	postID := fmt.Sprintf("%s_p%d", h.ForwardBaseID, h.ForwardIndex)
 	
-	// 1. 确定 Base Caption
-	var caption string
-	if h.ForwardTitle != "" {
-		caption = h.ForwardTitle
-	} else if h.ForwardOriginal != nil && h.ForwardOriginal.Caption != "" {
-		caption = h.ForwardOriginal.Caption
-	} else if h.ForwardPreview.Caption != "" {
-		caption = h.ForwardPreview.Caption
-	} else {
-		caption = "MtcACG:TG"
-	}
-
-	// 2. 将 Tags 拼接到 Caption 显示（可选，如果不想显示可去掉）
+	// 构造标题
+	caption := h.ForwardTitle
+	if caption == "" { caption = "MtcACG:TG" }
+	// 添加页码显示，方便查看
+	caption = fmt.Sprintf("%s [P%d]", caption, h.ForwardIndex)
 	if h.ForwardTags != "" {
 		caption = caption + "\n" + h.ForwardTags
 	}
 
-	// 3. 确定存入 DB 的 Tags
-	finalDBTags := h.ForwardTags
-	if finalDBTags == "" {
-		finalDBTags = "TG-forward"
-	}
+	dbTags := h.ForwardTags
+	if dbTags == "" { dbTags = "TG-Forward" }
 
 	var previewFileID, originFileID string
 	var width, height int
 
-	if len(h.ForwardPreview.Photo) > 0 {
-		srcPhoto := h.ForwardPreview.Photo[len(h.ForwardPreview.Photo)-1]
+	// 发送预览图到频道
+	if len(h.CurrentPreview.Photo) > 0 {
+		srcPhoto := h.CurrentPreview.Photo[len(h.CurrentPreview.Photo)-1]
 		fwdMsg, err := b.SendPhoto(ctx, &bot.SendPhotoParams{
 			ChatID:  h.Cfg.ChannelID,
 			Photo:   &models.InputFileString{Data: srcPhoto.FileID},
 			Caption: caption,
 		})
-		if err != nil || len(fwdMsg.Photo) == 0 {
-			log.Printf("❌ Forward preview(Photo) failed: %v", err)
-			b.SendMessage(ctx, &bot.SendMessageParams{ChatID: msg.Chat.ID, Text: "❌ 预览图转存失败。"})
-			h.Forwarding = false
-			return
+		if err != nil {
+			log.Printf("❌ P%d Preview Send Failed: %v", h.ForwardIndex, err)
+			return false
 		}
 		previewFileID = fwdMsg.Photo[len(fwdMsg.Photo)-1].FileID
 		width = srcPhoto.Width
 		height = srcPhoto.Height
-		if h.ForwardOriginal != nil && h.ForwardOriginal.Document != nil {
-			originFileID = h.ForwardOriginal.Document.FileID
+		
+		if h.CurrentOriginal != nil && h.CurrentOriginal.Document != nil {
+			originFileID = h.CurrentOriginal.Document.FileID
 		}
-	} else if h.ForwardPreview.Document != nil {
-		log.Printf("📥 单文件模式触发: %s", h.ForwardPreview.Document.FileName)
-		srcDoc := h.ForwardPreview.Document
+	} else if h.CurrentPreview.Document != nil {
+		// Document 模式
+		srcDoc := h.CurrentPreview.Document
 		fwdMsg, err := b.SendDocument(ctx, &bot.SendDocumentParams{
 			ChatID:   h.Cfg.ChannelID,
 			Document: &models.InputFileString{Data: srcDoc.FileID},
 			Caption:  caption,
 		})
-		if err == nil && fwdMsg.Document != nil {
-			previewFileID = fwdMsg.Document.FileID
-			if fwdMsg.Document.Thumbnail != nil {
-				width = fwdMsg.Document.Thumbnail.Width
-				height = fwdMsg.Document.Thumbnail.Height
-			}
-			originFileID = fwdMsg.Document.FileID
-		} else {
-			log.Printf("❌ Document 转发失败: %v", err)
-			b.SendMessage(ctx, &bot.SendMessageParams{ChatID: msg.Chat.ID, Text: "❌ 文件转发失败。"})
-			h.Forwarding = false
-			return
+		if err != nil {
+			log.Printf("❌ P%d Doc Send Failed: %v", h.ForwardIndex, err)
+			return false
+		}
+		previewFileID = fwdMsg.Document.FileID
+		originFileID = fwdMsg.Document.FileID // 文档模式原图即预览图
+		if fwdMsg.Document.Thumbnail != nil {
+			width = fwdMsg.Document.Thumbnail.Width
+			height = fwdMsg.Document.Thumbnail.Height
 		}
 	}
 
+	// 补发原图 (如果存在且不同)
 	if originFileID != "" && originFileID != previewFileID {
 		docMsg, err := b.SendDocument(ctx, &bot.SendDocumentParams{
 			ChatID:   h.Cfg.ChannelID,
 			Document: &models.InputFileString{Data: originFileID},
+			Caption:  fmt.Sprintf("⬇️ %s P%d Original", h.ForwardTitle, h.ForwardIndex),
 		})
-		if err == nil && docMsg.Document != nil {
+		if err == nil {
 			originFileID = docMsg.Document.FileID
-			log.Printf("✅ 原图已补发到频道，新 ID: %s", originFileID)
-		} else {
-			log.Printf("⚠️ 原图补发失败: %v", err)
 		}
 	}
 
-	// 存入 D1，使用解析出来的 Tags
-	err := h.DB.SaveImage(postID, previewFileID, originFileID, caption, finalDBTags, "TG-C", width, height)
+	// 存入数据库
+	err := h.DB.SaveImage(postID, previewFileID, originFileID, caption, dbTags, "TG-Forward", width, height)
 	if err != nil {
-		log.Printf("❌ D1 Save Failed: %v", err)
-		b.SendMessage(ctx, &bot.SendMessageParams{
-			ChatID: msg.Chat.ID,
-			Text:   "❌ 保存到数据库失败 (D1 Error)。",
-		})
-	} else {
-		b.SendMessage(ctx, &bot.SendMessageParams{
-			ChatID:          msg.Chat.ID,
-			Text:            fmt.Sprintf("✅ 发布成功！\nPost ID: %s", postID),
-			ReplyParameters: &models.ReplyParameters{MessageID: msg.ID},
-		})
+		log.Printf("❌ P%d DB Save Failed: %v", h.ForwardIndex, err)
+		b.SendMessage(ctx, &bot.SendMessageParams{ChatID: chatID, Text: "❌ 数据库保存失败，流程暂停。"})
+		return false
 	}
+	
+	log.Printf("✅ Published: %s", postID)
+	return true
+}
+
+// 3. 继续下一张 /forward_continue
+func (h *BotHandler) handleForwardContinue(ctx context.Context, b *bot.Bot, update *models.Update) {
+	if !h.Forwarding { return }
+	chatID := update.Message.Chat.ID
+
+	// 尝试发布当前缓存的图片
+	success := h.publishCurrentItem(ctx, b, chatID)
+	if !success {
+		return
+	}
+
+	// 发布成功后：更新索引，清空缓存
+	prevIndex := h.ForwardIndex
+	h.ForwardIndex++
+	h.CurrentPreview = nil
+	h.CurrentOriginal = nil
+
+	b.SendMessage(ctx, &bot.SendMessageParams{
+		ChatID: chatID,
+		Text:   fmt.Sprintf("✅ **P%d 已发布** (ID: `%s_p%d`)\n⬇️ 正在等待 **P%d** ...", prevIndex, h.ForwardBaseID, prevIndex, h.ForwardIndex),
+		ParseMode: models.ParseModeMarkdown,
+	})
+}
+
+// 4. 结束会话 /forward_end
+func (h *BotHandler) handleForwardEnd(ctx context.Context, b *bot.Bot, update *models.Update) {
+	if !h.Forwarding { return }
+	chatID := update.Message.Chat.ID
+
+	// 检查是否还有最后一张未发布 (用户发了图直接按end的情况)
+	if h.CurrentPreview != nil {
+		success := h.publishCurrentItem(ctx, b, chatID)
+		if success {
+			b.SendMessage(ctx, &bot.SendMessageParams{
+				ChatID: chatID,
+				Text:   fmt.Sprintf("✅ **P%d (尾图) 已发布**", h.ForwardIndex),
+				ParseMode: models.ParseModeMarkdown,
+			})
+		}
+	}
+
+	// 清理状态
 	h.Forwarding = false
-	h.ForwardPreview = nil
-	h.ForwardOriginal = nil
-	h.ForwardTags = "" // 清空
+	h.ForwardBaseID = ""
+	h.ForwardIndex = 0
+	h.CurrentPreview = nil
+	h.CurrentOriginal = nil
 	h.ForwardTitle = ""
+	h.ForwardTags = ""
+
+	b.SendMessage(ctx, &bot.SendMessageParams{
+		ChatID: chatID,
+		Text:   "🏁 **转发会话结束**",
+		ParseMode: models.ParseModeMarkdown,
+	})
 }
 
 func compressImage(data []byte, targetSize int64) ([]byte, error) {
