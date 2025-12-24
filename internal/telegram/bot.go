@@ -89,7 +89,7 @@ func NewBot(cfg *config.Config, db *database.D1Client) (*BotHandler, error) {
 				log.Printf("🖼 [Forward] 收到 P%d 预览图", h.ForwardIndex)
 				b.SendMessage(ctx, &bot.SendMessageParams{
 					ChatID:          msg.Chat.ID,
-					Text:            fmt.Sprintf("✅ 获取到 P%d 预览图了，主人请发送原图文件(Document)吧，喵~", h.ForwardIndex),
+					Text:            fmt.Sprintf("✅ yukiyuki获取到 P%d 预览图啦，主人请发送原图文件(Document)吧，喵~🐱", h.ForwardIndex),
 					ReplyParameters: &models.ReplyParameters{MessageID: msg.ID},
 				})
 				return
@@ -108,7 +108,7 @@ func NewBot(cfg *config.Config, db *database.D1Client) (*BotHandler, error) {
 				log.Printf("📄 [Forward] 收到 P%d 原图", h.ForwardIndex)
 				b.SendMessage(ctx, &bot.SendMessageParams{
 					ChatID:          msg.Chat.ID,
-					Text:            fmt.Sprintf("✅ P%d 就绪。\n请输入 /forward_continue 发布并继续下一张\n或 /forward_end 发布并结束。", h.ForwardIndex),
+					Text:            fmt.Sprintf("✅ P%d 就绪了喵~🐱。\n请输入 /forward_continue 发布并继续下一张\n或 /forward_end 发布并结束（^v^）。", h.ForwardIndex),
 					ReplyParameters: &models.ReplyParameters{MessageID: msg.ID},
 				})
 				return
@@ -294,7 +294,7 @@ func (h *BotHandler) handleForwardStart(ctx context.Context, b *bot.Bot, update 
 	h.CurrentPreview = nil
 	h.CurrentOriginal = nil
 
-	info := fmt.Sprintf("✅ **转发模式已启动**\n🆔 BaseID: `%s`\n📝 标题: %s\n🏷 标签: %s\n\n👉 请发送 **P0 预览图**", 
+	info := fmt.Sprintf("✅ **转发模式已启动**\n🆔 BaseID: `%s`\n📝 标题: %s\n🏷 标签: %s\n\n🐱 请发送 **首张预览图**吧,喵~(^v^)", 
 		h.ForwardBaseID, title, tags)
 
 	b.SendMessage(ctx, &bot.SendMessageParams{
@@ -307,7 +307,7 @@ func (h *BotHandler) handleForwardStart(ctx context.Context, b *bot.Bot, update 
 // 2. 辅助函数：发布当前缓存的那一张 (BaseID_pX)
 func (h *BotHandler) publishCurrentItem(ctx context.Context, b *bot.Bot, chatID int64) bool {
 	if h.CurrentPreview == nil {
-		b.SendMessage(ctx, &bot.SendMessageParams{ChatID: chatID, Text: "⚠️ 错误：当前没有待发布的图片，无法继续。"})
+		b.SendMessage(ctx, &bot.SendMessageParams{ChatID: chatID, Text: "⚠️ 嗷，出错啦：当前没有等待发布的图片哦，没办法继续了喵~。"})
 		return false
 	}
 
@@ -384,7 +384,7 @@ func (h *BotHandler) publishCurrentItem(ctx context.Context, b *bot.Bot, chatID 
 	err := h.DB.SaveImage(postID, previewFileID, originFileID, caption, dbTags, "TG-Forward", width, height)
 	if err != nil {
 		log.Printf("❌ P%d DB Save Failed: %v", h.ForwardIndex, err)
-		b.SendMessage(ctx, &bot.SendMessageParams{ChatID: chatID, Text: "❌ 数据库保存失败，流程暂停。"})
+		b.SendMessage(ctx, &bot.SendMessageParams{ChatID: chatID, Text: "❌ 糟了！数据库保存失败，流程暂停。喵呜(^x_x^)"})
 		return false
 	}
 	
@@ -428,7 +428,7 @@ func (h *BotHandler) handleForwardEnd(ctx context.Context, b *bot.Bot, update *m
 			b.SendMessage(ctx, &bot.SendMessageParams{
 				ChatID: chatID,
 				Text:   fmt.Sprintf("✅ **P%d (尾图) 已发布**", h.ForwardIndex),
-				ParseMode: models.ParseModeMarkdown,
+				//ParseMode: models.ParseModeMarkdown,
 			})
 		}
 	}
@@ -444,7 +444,7 @@ func (h *BotHandler) handleForwardEnd(ctx context.Context, b *bot.Bot, update *m
 
 	b.SendMessage(ctx, &bot.SendMessageParams{
 		ChatID: chatID,
-		Text:   "🏁 **转发会话结束**",
+		Text:   "🏁 🐱好耶（^-^）**任务完成喵~** 🐱",
 		ParseMode: models.ParseModeMarkdown,
 	})
 }
@@ -497,7 +497,7 @@ func (h *BotHandler) handlePixivLink(ctx context.Context, b *bot.Bot, update *mo
 
 	loadingMsg, _ := b.SendMessage(ctx, &bot.SendMessageParams{
 		ChatID:          update.Message.Chat.ID,
-		Text:            "⏳ 正在抓取 Pixiv ID: " + illustID + " ...",
+		Text:            "⏳ 正在抓取 Pixiv ID 了喵~🐱: " + illustID + " ...",
 		ReplyParameters: &models.ReplyParameters{MessageID: update.Message.ID},
 	})
 
@@ -534,7 +534,7 @@ func (h *BotHandler) handlePixivLink(ctx context.Context, b *bot.Bot, update *mo
 		time.Sleep(1 * time.Second)
 	}
 
-	finalText := fmt.Sprintf("✅ 处理完成！\n成功发送: %d 张\n跳过重复: %d 张", successCount, skippedCount)
+	finalText := fmt.Sprintf("✅ 处理完成了喵~🐱！\n成功发送: %d 张\n跳过重复: %d 张", successCount, skippedCount)
 	b.SendMessage(ctx, &bot.SendMessageParams{
 		ChatID: update.Message.Chat.ID,
 		Text:   finalText,
@@ -567,7 +567,7 @@ func (h *BotHandler) handleManyacgLink(ctx context.Context, b *bot.Bot, update *
 	// 提示用户正在处理
 	loadingMsg, _ := b.SendMessage(ctx, &bot.SendMessageParams{
 		ChatID: update.Message.Chat.ID,
-		Text:   "⏳ 正在抓取 ManyACG 链接...",
+		Text:   "⏳ 正在抓取 ManyACG 链接...了 喵~🐱",
 		ReplyParameters: &models.ReplyParameters{MessageID: update.Message.ID},
 	})
 
@@ -617,7 +617,7 @@ func (h *BotHandler) handleManyacgLink(ctx context.Context, b *bot.Bot, update *
 	}
 
 	// 4. 反馈结果
-	finalText := fmt.Sprintf("✅ 处理完成！\n成功发送: %d 张\n跳过重复: %d 张", successCount, skippedCount)
+	finalText := fmt.Sprintf("✅ 处理完成了喵~🐱！\n成功发送: %d 张\n跳过重复: %d 张", successCount, skippedCount)
 	b.SendMessage(ctx, &bot.SendMessageParams{
 		ChatID: update.Message.Chat.ID,
 		Text:   finalText,
@@ -657,7 +657,7 @@ func (h *BotHandler) handleYandeLink(ctx context.Context, b *bot.Bot, update *mo
     if h.DB.CheckExists(pid) {
         b.SendMessage(ctx, &bot.SendMessageParams{
             ChatID:             update.Message.Chat.ID,
-            Text:               "⏭️ 这张图已经发过了 (ID: " + pid + ")，跳过。",
+            Text:               "⏭️ 这张图已经发过了哦 (ID: " + pid + ")，跳过。",
             ReplyParameters:    &models.ReplyParameters{MessageID: update.Message.ID},
         })
         return // 直接结束
@@ -666,7 +666,7 @@ func (h *BotHandler) handleYandeLink(ctx context.Context, b *bot.Bot, update *mo
     // 提示正在抓取
     loadingMsg, _ := b.SendMessage(ctx, &bot.SendMessageParams{
         ChatID:             update.Message.Chat.ID,
-        Text:               "⏳ 正在抓取 Yande ID: " + postID + " ...",
+        Text:               "⏳ 正在抓取 Yande ID 了喵~🐱: " + postID + " ...",
         ReplyParameters:    &models.ReplyParameters{MessageID: update.Message.ID},
     })
 
