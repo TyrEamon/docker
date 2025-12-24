@@ -300,7 +300,7 @@ func (h *BotHandler) handleForwardStart(ctx context.Context, b *bot.Bot, update 
 	b.SendMessage(ctx, &bot.SendMessageParams{
 		ChatID:    msg.Chat.ID,
 		Text:      info,
-		ParseMode: models.ParseModeMarkdown,
+		///ParseMode: models.ParseModeMarkdown,
 	})
 }
 
