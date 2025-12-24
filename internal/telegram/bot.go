@@ -61,7 +61,8 @@ func NewBot(cfg *config.Config, db *database.D1Client) (*BotHandler, error) {
     b.RegisterHandler(bot.HandlerTypeMessageText, "yande.re/post/show/", bot.MatchTypeContains, h.handleYandeLink)
 
 	// 在 NewBot() 注册
-    b.RegisterHandler(bot.HandlerTypeMessageText, "fanbox.cc/posts/", bot.MatchTypeContains, h.handleFanboxLink)
+    b.RegisterHandler(bot.HandlerTypeMessageText, "fanbox.cc/@", bot.MatchTypeContains, h.handleFanboxLink)
+
 
 	// ✅ /forward_start & /forward_end
 	b.RegisterHandler(bot.HandlerTypeMessageText, "/forward_start", bot.MatchTypePrefix, h.handleForwardStart)
@@ -699,14 +700,13 @@ func (h *BotHandler) handleYandeLink(ctx context.Context, b *bot.Bot, update *mo
     })
 }
 
-// 新增处理函数
 func (h *BotHandler) handleFanboxLink(ctx context.Context, b *bot.Bot, update *models.Update) {
     if h.Forwarding {
         return
     }
 
     text := update.Message.Text
-    re := regexp.MustCompile(`fanbox\.cc/posts/(\d+)`)
+    re := regexp.MustCompile(`fanbox\.cc/@[\w-]+/posts/(\d+)`)
     matches := re.FindStringSubmatch(text)
     if len(matches) < 2 {
         return
@@ -773,4 +773,5 @@ func (h *BotHandler) handleFanboxLink(ctx context.Context, b *bot.Bot, update *m
         Text:   fmt.Sprintf("✅ Fanbox 处理完成！发送 %d 张", successCount),
     })
 }
+
 
