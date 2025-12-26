@@ -98,10 +98,8 @@ func StartCosineTag(ctx context.Context, cfg *config.Config, db *database.D1Clie
 							break
 						}
 
-						// ================= ID 生成修正逻辑 =================
-						// 强制使用标准格式：pixiv_{PID}_p{Page}
 						pidStr := img.PID
-						pagePart := "_p0" // 默认为 p0
+						pagePart := "_p0" 
 						
 						// 尝试从文件名解析 _p1, _p2 等
 						if strings.Contains(img.Filename, "_p") {
@@ -119,7 +117,6 @@ func StartCosineTag(ctx context.Context, cfg *config.Config, db *database.D1Clie
 						// 构造标准 DB Key (无后缀)
 						dbKey := fmt.Sprintf("pixiv_%s%s", pidStr, pagePart)
 
-                        // 利用 d1.go 中已经实现的 CheckExists 方法，它会穿透查询数据库
                         if db.CheckExists(dbKey) || 
                            db.CheckExists(dbKey+".jpg") || 
                            db.CheckExists(dbKey+".png") || 
@@ -127,8 +124,6 @@ func StartCosineTag(ctx context.Context, cfg *config.Config, db *database.D1Clie
                              log.Printf("♻️ cosine-Skip %s (Already in DB)", dbKey)
                             continue
                         }
-
-						// ================= 下载逻辑 =================
 						
 						var imgData []byte
 						var finalExt string = ".jpg"
@@ -154,7 +149,7 @@ func StartCosineTag(ctx context.Context, cfg *config.Config, db *database.D1Clie
 						imgResp, err := client.R().SetHeaders(dlHeaders).Get(downloadURL)
 						success := (err == nil && imgResp.StatusCode() == 200)
 
-						// 2. 🚨 备用方案
+						// 2. 备用方案
 						if !success {
 							log.Printf("⚠️ Primary Source Failed, trying Cosine Backup...")
 							
@@ -195,8 +190,6 @@ func StartCosineTag(ctx context.Context, cfg *config.Config, db *database.D1Clie
 						}
 						
 						imgData = imgResp.Body()
-
-						// ================= 发送与存储 =================
 
 						cleanTitle := strings.TrimSpace(img.Title)
 						tagsStr := strings.Join(img.Tags, " #")
