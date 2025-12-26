@@ -15,17 +15,15 @@ import (
 func main() {
 	log.Println("🚀 Starting Go-MtcACG Bot...")
 	
-	// 1. 加载配置
 	cfg := config.Load()
 	if cfg.BotToken == "" {
 		log.Fatal("❌ BOT_TOKEN is missing")
 	}
 
-	// 2. 初始化数据库客户端
 	db := database.NewD1Client(cfg)
-	db.SyncHistory() // 启动时同步一次
+	db.SyncHistory() 
 
-	// 3. 初始化 Bot
+	
 	botHandler, err := telegram.NewBot(cfg, db)
 	if err != nil {
 		log.Fatal(err)
@@ -34,42 +32,39 @@ func main() {
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer cancel()
 
-	// 4. 启动爬虫 (并发运行)
+	
 	go crawler.StartYande(ctx, cfg, db, botHandler)
-	// 5 分钟后启动 Pixiv（偏重，图大）
+	
     go func() {
         time.Sleep(5 * time.Minute)
         crawler.StartPixiv(ctx, cfg, db, botHandler)
     }()
-	
+
+	//其他爬虫脚本，还为完善。
 	///go crawler.StartDanbooru(ctx, cfg, db, botHandler)///
 	///go crawler.StartKemono(ctx, cfg, db, botHandler)///
 
-    // 10 分钟后启动 Cosine（也会打到 Pixiv 源）
     go func() {
         time.Sleep(10 * time.Minute)
         crawler.StartCosineTag(ctx, cfg, db, botHandler)
     }()
 
-    // 15 分钟后启动 ManyACG 全站
     go func() {
         time.Sleep(15 * time.Minute)
         crawler.StartManyACGAll(ctx, cfg, db, botHandler)
     }()
 
+	//没必要开了
 	///go crawler.StartManyACGSese(ctx, cfg, db, botHandler)///
 
-    // 20 分钟后启动 ManyACG random
     go func() {
         time.Sleep(20 * time.Minute)
         crawler.StartManyACG(ctx, cfg, db, botHandler)
     }()
 
-	// 5. 启动 Bot 监听 (阻塞主线程)
 	log.Println("👂 Bot is listening...")
 	botHandler.Start(ctx)
 
-	// 【新增】程序退出前，最后保存一次历史
 	log.Println("🛑 Shutting down... Saving history...")
 	db.PushHistory()
 	log.Println("👋 Bye!")
