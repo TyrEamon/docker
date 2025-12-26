@@ -31,10 +31,10 @@ type BotHandler struct {
 	Cfg             *config.Config
 	DB              *database.D1Client
 	Forwarding      bool
-	ForwardBaseID   string          // 基础ID (例如 manual_1338)	
-	ForwardIndex    int             // 当前是第几张 (0, 1, 2...)
+	ForwardBaseID   string          	
+	ForwardIndex    int             
 	ForwardTitle    string
-	ForwardTags     string // ✅ 新增字段
+	ForwardTags     string 
     CurrentPreview  *models.Message
     CurrentOriginal *models.Message
 }
@@ -49,41 +49,38 @@ func NewBot(cfg *config.Config, db *database.D1Client) (*BotHandler, error) {
 
 	h.API = b
 
-	// ✅ /save
+	// /save
 	b.RegisterHandler(bot.HandlerTypeMessageText, "/save", bot.MatchTypeExact, h.handleSave)
 
-	// ✅ Pixiv Link
+	// Pixiv Link
 	b.RegisterHandler(bot.HandlerTypeMessageText, "pixiv.net/artworks/", bot.MatchTypeContains, h.handlePixivLink)
 
-	// ✅ 新增：监听 ManyACG 链接
+	//监听 ManyACG 链接
     b.RegisterHandler(bot.HandlerTypeMessageText, "manyacg.top/artwork/", bot.MatchTypeContains, h.handleManyacgLink)
 
-	// ✅ 新增：监听 Yande 链接
-    // 匹配如 https://yande.re/post/show/1179601
+	// 监听 Yande 链接
     b.RegisterHandler(bot.HandlerTypeMessageText, "yande.re/post/show/", bot.MatchTypeContains, h.handleYandeLink)
 
-	// 在 NewBot() 注册
     //b.RegisterHandler(bot.HandlerTypeMessageText, "fanbox.cc/@", bot.MatchTypeContains, h.handleFanboxLink)
 
 
-	// ✅ /forward_start & /forward_end
+	//  /forward_start & /forward_end
 	b.RegisterHandler(bot.HandlerTypeMessageText, "/forward_start", bot.MatchTypePrefix, h.handleForwardStart)
 	b.RegisterHandler(bot.HandlerTypeMessageText, "/forward_continue", bot.MatchTypeExact, h.handleForwardContinue) // 新增
 	b.RegisterHandler(bot.HandlerTypeMessageText, "/forward_end", bot.MatchTypeExact, h.handleForwardEnd)
 
-	// ✅ Default handler
 	b.RegisterHandler(bot.HandlerTypeMessageText, "", bot.MatchTypePrefix, func(ctx context.Context, b *bot.Bot, update *models.Update) {
 		if update.Message == nil {
 			return
 		}
-// 1. 如果处于转发模式，拦截图片
+        //转发模式，拦截图片
 		if h.Forwarding {
 			msg := update.Message
 			
 			// 处理图片 (Preview)
 			if len(msg.Photo) > 0 {
 				h.CurrentPreview = msg
-				// 如果是新的一张，清空可能残留的原图
+				// 清空残留的原图
 				h.CurrentOriginal = nil 
 				
 				log.Printf("🖼 [Forward] 收到 P%d 预览图", h.ForwardIndex)
@@ -116,7 +113,7 @@ func NewBot(cfg *config.Config, db *database.D1Client) (*BotHandler, error) {
 			return
 		}
 
-		// 2. 非转发模式的手动处理 (handleManual)
+		// 2. 非转发模式的手动处理
 		if len(update.Message.Photo) > 0 {
 			h.handleManual(ctx, b, update)
 		}
@@ -262,17 +259,14 @@ func (h *BotHandler) handleManual(ctx context.Context, b *bot.Bot, update *model
 	})
 }
 
-// ==================== 转发/父子图 核心逻辑 ====================
 
-// 1. 开始会话
 func (h *BotHandler) handleForwardStart(ctx context.Context, b *bot.Bot, update *models.Update) {
 	msg := update.Message
 	userID := msg.From.ID
-	if userID != 8040798522 && userID != 6874581126 { // 鉴权
+	if userID != 8040798522 && userID != 6874581126 { 
 		return
 	}
 
-	// 解析标题和标签
 	rawText := ""
 	if len(msg.Text) > len("/forward_start") {
 		rawText = strings.TrimSpace(msg.Text[len("/forward_start"):])
@@ -287,7 +281,7 @@ func (h *BotHandler) handleForwardStart(ctx context.Context, b *bot.Bot, update 
 
 	// 初始化状态
 	h.Forwarding = true
-	h.ForwardBaseID = fmt.Sprintf("manual_%d", msg.ID) // 只有 Start 时生成一次 BaseID
+	h.ForwardBaseID = fmt.Sprintf("manual_%d", msg.ID)
 	h.ForwardIndex = 0
 	h.ForwardTitle = title
 	h.ForwardTags = tags
@@ -304,20 +298,17 @@ func (h *BotHandler) handleForwardStart(ctx context.Context, b *bot.Bot, update 
 	})
 }
 
-// 2. 辅助函数：发布当前缓存的那一张 (BaseID_pX)
 func (h *BotHandler) publishCurrentItem(ctx context.Context, b *bot.Bot, chatID int64) bool {
 	if h.CurrentPreview == nil {
 		b.SendMessage(ctx, &bot.SendMessageParams{ChatID: chatID, Text: "⚠️ 嗷，出错啦：当前没有等待发布的图片哦，没办法继续了喵~。"})
 		return false
 	}
 
-	// 构造 ID: manual_1001_p0
 	postID := fmt.Sprintf("%s_p%d", h.ForwardBaseID, h.ForwardIndex)
 	
 	// 构造标题
 	caption := h.ForwardTitle
 	if caption == "" { caption = "MtcACG:TG" }
-	// 添加页码显示，方便查看
 	caption = fmt.Sprintf("%s [P%d]", caption, h.ForwardIndex)
 	if h.ForwardTags != "" {
 		caption = caption + "\n" + h.ForwardTags
@@ -349,7 +340,6 @@ func (h *BotHandler) publishCurrentItem(ctx context.Context, b *bot.Bot, chatID 
 			originFileID = h.CurrentOriginal.Document.FileID
 		}
 	} else if h.CurrentPreview.Document != nil {
-		// Document 模式
 		srcDoc := h.CurrentPreview.Document
 		fwdMsg, err := b.SendDocument(ctx, &bot.SendDocumentParams{
 			ChatID:   h.Cfg.ChannelID,
@@ -361,14 +351,14 @@ func (h *BotHandler) publishCurrentItem(ctx context.Context, b *bot.Bot, chatID 
 			return false
 		}
 		previewFileID = fwdMsg.Document.FileID
-		originFileID = fwdMsg.Document.FileID // 文档模式原图即预览图
+		originFileID = fwdMsg.Document.FileID 
 		if fwdMsg.Document.Thumbnail != nil {
 			width = fwdMsg.Document.Thumbnail.Width
 			height = fwdMsg.Document.Thumbnail.Height
 		}
 	}
 
-	// 补发原图 (如果存在且不同)
+	// 补发原图
 	if originFileID != "" && originFileID != previewFileID {
 		docMsg, err := b.SendDocument(ctx, &bot.SendDocumentParams{
 			ChatID:   h.Cfg.ChannelID,
@@ -392,7 +382,7 @@ func (h *BotHandler) publishCurrentItem(ctx context.Context, b *bot.Bot, chatID 
 	return true
 }
 
-// 3. 继续下一张 /forward_continue
+// 3. 继续下一张
 func (h *BotHandler) handleForwardContinue(ctx context.Context, b *bot.Bot, update *models.Update) {
 	if !h.Forwarding { return }
 	chatID := update.Message.Chat.ID
@@ -403,7 +393,7 @@ func (h *BotHandler) handleForwardContinue(ctx context.Context, b *bot.Bot, upda
 		return
 	}
 
-	// 发布成功后：更新索引，清空缓存
+	// 更新索引，清空缓存
 	prevIndex := h.ForwardIndex
 	h.ForwardIndex++
 	h.CurrentPreview = nil
@@ -416,12 +406,12 @@ func (h *BotHandler) handleForwardContinue(ctx context.Context, b *bot.Bot, upda
 	})
 }
 
-// 4. 结束会话 /forward_end
+// 4. 结束会话
 func (h *BotHandler) handleForwardEnd(ctx context.Context, b *bot.Bot, update *models.Update) {
 	if !h.Forwarding { return }
 	chatID := update.Message.Chat.ID
 
-	// 检查是否还有最后一张未发布 (用户发了图直接按end的情况)
+	// 检查是否还有最后一张未发布
 	if h.CurrentPreview != nil {
 		success := h.publishCurrentItem(ctx, b, chatID)
 		if success {
