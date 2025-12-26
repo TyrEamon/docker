@@ -8,7 +8,6 @@ import (
 	"time"
 )
 
-// YandePostLink 用于解析 API 返回的单条数据
 type YandePostLink struct {
 	ID        int    `json:"id"`
 	ParentID  int    `json:"parent_id"`
@@ -20,11 +19,10 @@ type YandePostLink struct {
 	Height    int    `json:"height"`
 }
 
-// GetYandePost 根据 ID 获取图片详情
+//根据 ID 获取图片详情
 func GetYandePost(id string) (*YandePostLink, error) {
 	client := &http.Client{Timeout: 30 * time.Second}
 	
-	// Yande API 支持通过 id 过滤: https://yande.re/post.json?tags=id:123456
 	url := fmt.Sprintf("https://yande.re/post.json?tags=id:%s", id)
 	
 	req, _ := http.NewRequest("GET", url, nil)
@@ -52,12 +50,11 @@ func GetYandePost(id string) (*YandePostLink, error) {
 	return &posts[0], nil
 }
 
-// DownloadYandeImage 下载图片数据
+// 下载图片数据
 func DownloadYandeImage(url string) ([]byte, error) {
 	client := &http.Client{Timeout: 60 * time.Second}
 	req, _ := http.NewRequest("GET", url, nil)
 	req.Header.Set("User-Agent", "Mozilla/5.0")
-	// Yande 一般不需要 Referer 防盗链，但加上也无妨
 	req.Header.Set("Referer", "https://yande.re/")
 	
 	resp, err := client.Do(req)
@@ -73,18 +70,16 @@ func DownloadYandeImage(url string) ([]byte, error) {
 	return io.ReadAll(resp.Body)
 }
 
-// SelectBestURL 选择最佳画质且 TG 能发送的链接
 func SelectBestURL(post *YandePostLink) string {
-	const MaxSize = 10 * 1024 * 1024 // 10MB conservative limit for TG bot API
+	const MaxSize = 10 * 1024 * 1024 
 	
 	// 如果原图小于限制，优先原图
 	if post.FileSize > 0 && post.FileSize < MaxSize {
 		return post.FileURL
 	}
-	// 否则用大样图 (Sample)
+	// 否 用大图
 	if post.SampleURL != "" {
 		return post.SampleURL
 	}
-	// 兜底
 	return post.FileURL
 }
