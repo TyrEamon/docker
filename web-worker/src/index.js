@@ -42,6 +42,15 @@ export default {
       return await handleDetail(detailMatch[1], env);
     }
 
+    if (path === '/api/bg_safe') {
+      return await handleBgRandom(false, url, env); // 不要 R18
+    }
+
+    if (path === '/api/bg_all') {
+      return await handleBgRandom(true, url, env);  // 包含 R18
+    }
+
+
     // 5. 静态页面
     if (path === '/about') {
       return new Response(htmlAbout(), {
