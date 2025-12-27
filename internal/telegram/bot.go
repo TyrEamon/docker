@@ -76,6 +76,12 @@ func NewBot(cfg *config.Config, db *database.D1Client) (*BotHandler, error) {
 		if update.Message == nil {
 			return
 		}
+
+		// 如果是指令消息，直接跳过，让后面的 Handler 去处理
+		if strings.HasPrefix(update.Message.Text, "/") {
+			return 
+		}
+		
         //转发模式，拦截图片
 		if h.Forwarding {
 			msg := update.Message
@@ -118,7 +124,10 @@ func NewBot(cfg *config.Config, db *database.D1Client) (*BotHandler, error) {
 
 		// 2. 非转发模式的手动处理
 		if len(update.Message.Photo) > 0 {
-			h.handleManual(ctx, b, update)
+		   go func() {
+			   // 为了统一，用 context.Background()
+			 h.handleManual(context.Background(), b, update)
+		   }()
 		}
 	})
 
@@ -480,6 +489,11 @@ func (h *BotHandler) handlePixivLink(ctx context.Context, b *bot.Bot, update *mo
 	if h.Forwarding {
 		return
 	}
+
+	// 启动异步 Goroutine
+    go func() {
+        bgCtx := context.Background()
+		
 	text := update.Message.Text
 	re := regexp.MustCompile(`artworks/(\d+)`)
 	matches := re.FindStringSubmatch(text)
@@ -488,7 +502,7 @@ func (h *BotHandler) handlePixivLink(ctx context.Context, b *bot.Bot, update *mo
 	}
 	illustID := matches[1]
 
-	loadingMsg, _ := b.SendMessage(ctx, &bot.SendMessageParams{
+	loadingMsg, _ := b.SendMessage(bgCtx, &bot.SendMessageParams{
 		ChatID:          update.Message.Chat.ID,
 		Text:            "⏳ 正在抓取 Pixiv ID 了喵~🐱: " + illustID + " ...",
 		ReplyParameters: &models.ReplyParameters{MessageID: update.Message.ID},
@@ -496,7 +510,7 @@ func (h *BotHandler) handlePixivLink(ctx context.Context, b *bot.Bot, update *mo
 
 	illust, err := pixiv.GetIllust(illustID, h.Cfg.PixivPHPSESSID)
 	if err != nil {
-		b.SendMessage(ctx, &bot.SendMessageParams{
+		b.SendMessage(bgCtx, &bot.SendMessageParams{
 			ChatID: update.Message.Chat.ID,
 			Text:   "❌ 获取失败: " + err.Error(),
 		})
@@ -522,23 +536,24 @@ func (h *BotHandler) handlePixivLink(ctx context.Context, b *bot.Bot, update *mo
 			skippedCount++
 			continue
 		}
-		h.ProcessAndSend(ctx, imgData, pid, illust.Tags, caption, "pixiv", page.Width, page.Height)
+		h.ProcessAndSend(bgCtx, imgData, pid, illust.Tags, caption, "pixiv", page.Width, page.Height)
 		successCount++
 		time.Sleep(1 * time.Second)
 	}
 
 	finalText := fmt.Sprintf("✅ 处理完成了喵~🐱！\n成功发送: %d 张\n跳过重复: %d 张", successCount, skippedCount)
-	b.SendMessage(ctx, &bot.SendMessageParams{
+	b.SendMessage(bgCtx, &bot.SendMessageParams{
 		ChatID: update.Message.Chat.ID,
 		Text:   finalText,
 	})
 
 	if loadingMsg != nil {
-		b.DeleteMessage(ctx, &bot.DeleteMessageParams{
+		b.DeleteMessage(bgCtx, &bot.DeleteMessageParams{
 			ChatID:    update.Message.Chat.ID,
 			MessageID: loadingMsg.ID,
 		})
-	}
+	 }
+  }()
 }
 
 func (h *BotHandler) handleManyacgLink(ctx context.Context, b *bot.Bot, update *models.Update) {
@@ -546,6 +561,10 @@ func (h *BotHandler) handleManyacgLink(ctx context.Context, b *bot.Bot, update *
 	if h.Forwarding {
 		return
 	}
+
+	// 启动异步 Goroutine
+    go func() {
+        bgCtx := context.Background()
 
 	text := update.Message.Text
 
@@ -558,7 +577,7 @@ func (h *BotHandler) handleManyacgLink(ctx context.Context, b *bot.Bot, update *
 	artworkURL := matches[0]
 
 	// 提示用户正在处理
-	loadingMsg, _ := b.SendMessage(ctx, &bot.SendMessageParams{
+	loadingMsg, _ := b.SendMessage(bgCtx, &bot.SendMessageParams{
 		ChatID: update.Message.Chat.ID,
 		Text:   "⏳ 正在抓取 ManyACG 链接...了 喵~🐱",
 		ReplyParameters: &models.ReplyParameters{MessageID: update.Message.ID},
@@ -567,7 +586,7 @@ func (h *BotHandler) handleManyacgLink(ctx context.Context, b *bot.Bot, update *
 	// 2. 调用 manyacg 包获取信息
 	artwork, err := manyacg.GetArtworkInfo(artworkURL)
 	if err != nil {
-		b.SendMessage(ctx, &bot.SendMessageParams{
+		b.SendMessage(bgCtx, &bot.SendMessageParams{
 			ChatID: update.Message.Chat.ID,
 			Text:   "❌ 获取失败: " + err.Error(),
 		})
@@ -580,7 +599,7 @@ func (h *BotHandler) handleManyacgLink(ctx context.Context, b *bot.Bot, update *
 
 	for i, pic := range artwork.Pictures {
 		// 下载原图
-		imgData, err := manyacg.DownloadOriginal(ctx, pic.ID)
+		imgData, err := manyacg.DownloadOriginal(bgCtx, pic.ID)
 		if err != nil {
 			fmt.Printf("❌ ManyACG Download Failed: %v\n", err)
 			continue
@@ -602,7 +621,7 @@ func (h *BotHandler) handleManyacgLink(ctx context.Context, b *bot.Bot, update *
 		}
 
 		// 发送
-		h.ProcessAndSend(ctx, imgData, pid, manyacg.FormatTags(artwork.Tags), caption, "manyacg", pic.Width, pic.Height)
+		h.ProcessAndSend(bgCtx, imgData, pid, manyacg.FormatTags(artwork.Tags), caption, "manyacg", pic.Width, pic.Height)
 		successCount++
 
 		// 稍微歇一下
@@ -611,18 +630,19 @@ func (h *BotHandler) handleManyacgLink(ctx context.Context, b *bot.Bot, update *
 
 	// 4. 反馈结果
 	finalText := fmt.Sprintf("✅ 处理完成了喵~🐱！\n成功发送: %d 张\n跳过重复: %d 张", successCount, skippedCount)
-	b.SendMessage(ctx, &bot.SendMessageParams{
+	b.SendMessage(bgCtx, &bot.SendMessageParams{
 		ChatID: update.Message.Chat.ID,
 		Text:   finalText,
 	})
 
 	// 删掉那个“正在抓取”的提示（可选）
 	if loadingMsg != nil {
-		b.DeleteMessage(ctx, &bot.DeleteMessageParams{
+		b.DeleteMessage(bgCtx, &bot.DeleteMessageParams{
 			ChatID:    update.Message.Chat.ID,
 			MessageID: loadingMsg.ID,
 		})
 	}
+  }()
 }
 
 // ✅ 新增处理函数
@@ -630,6 +650,10 @@ func (h *BotHandler) handleYandeLink(ctx context.Context, b *bot.Bot, update *mo
     if h.Forwarding {
         return
     }
+
+	// 启动异步 Goroutine
+    go func() {
+        bgCtx := context.Background()
 
     text := update.Message.Text
     // 正则匹配 ID
@@ -648,7 +672,7 @@ func (h *BotHandler) handleYandeLink(ctx context.Context, b *bot.Bot, update *mo
 
     // ✅ 1. 先查重
     if h.DB.CheckExists(pid) {
-        b.SendMessage(ctx, &bot.SendMessageParams{
+        b.SendMessage(bgCtx, &bot.SendMessageParams{
             ChatID:             update.Message.Chat.ID,
             Text:               "⏭️ 这张图已经发过了哦 (ID: " + pid + ")，跳过。",
             ReplyParameters:    &models.ReplyParameters{MessageID: update.Message.ID},
@@ -657,7 +681,7 @@ func (h *BotHandler) handleYandeLink(ctx context.Context, b *bot.Bot, update *mo
     }
 
     // 提示正在抓取
-    loadingMsg, _ := b.SendMessage(ctx, &bot.SendMessageParams{
+    loadingMsg, _ := b.SendMessage(bgCtx, &bot.SendMessageParams{
         ChatID:             update.Message.Chat.ID,
         Text:               "⏳ 正在抓取 Yande ID 了喵~🐱: " + postID + " ...",
         ReplyParameters:    &models.ReplyParameters{MessageID: update.Message.ID},
@@ -666,13 +690,13 @@ func (h *BotHandler) handleYandeLink(ctx context.Context, b *bot.Bot, update *mo
     // 2. 获取详情
     post, err := yande.GetYandePost(postID)
     if err != nil {
-        b.SendMessage(ctx, &bot.SendMessageParams{
+        b.SendMessage(bgCtx, &bot.SendMessageParams{
             ChatID: update.Message.Chat.ID,
             Text:   "❌ 获取失败: " + err.Error(),
         })
         // 删掉 loading 消息
         if loadingMsg != nil {
-            b.DeleteMessage(ctx, &bot.DeleteMessageParams{ChatID: update.Message.Chat.ID, MessageID: loadingMsg.ID})
+            b.DeleteMessage(bgCtx, &bot.DeleteMessageParams{ChatID: update.Message.Chat.ID, MessageID: loadingMsg.ID})
         }
         return
     }
@@ -681,12 +705,12 @@ func (h *BotHandler) handleYandeLink(ctx context.Context, b *bot.Bot, update *mo
     imgURL := yande.SelectBestURL(post)
     imgData, err := yande.DownloadYandeImage(imgURL)
     if err != nil {
-        b.SendMessage(ctx, &bot.SendMessageParams{
+        b.SendMessage(bgCtx, &bot.SendMessageParams{
             ChatID: update.Message.Chat.ID,
             Text:   "❌ 下载图片失败: " + err.Error(),
         })
         if loadingMsg != nil {
-            b.DeleteMessage(ctx, &bot.DeleteMessageParams{ChatID: update.Message.Chat.ID, MessageID: loadingMsg.ID})
+            b.DeleteMessage(bgCtx, &bot.DeleteMessageParams{ChatID: update.Message.Chat.ID, MessageID: loadingMsg.ID})
         }
         return
     }
@@ -697,28 +721,34 @@ func (h *BotHandler) handleYandeLink(ctx context.Context, b *bot.Bot, update *mo
         post.ID, post.Width, post.Height, tags)
 
     // 5. 发送并保存
-    h.ProcessAndSend(ctx, imgData, pid, post.Tags, caption, "yande", post.Width, post.Height)
+    h.ProcessAndSend(bgCtx, imgData, pid, post.Tags, caption, "yande", post.Width, post.Height)
 
     // 6. 完成反馈
     if loadingMsg != nil {
-        b.DeleteMessage(ctx, &bot.DeleteMessageParams{
+        b.DeleteMessage(bgCtx, &bot.DeleteMessageParams{
             ChatID:    update.Message.Chat.ID,
             MessageID: loadingMsg.ID,
         })
     }
     
-    b.SendMessage(ctx, &bot.SendMessageParams{
+    b.SendMessage(bgCtx, &bot.SendMessageParams{
         ChatID: update.Message.Chat.ID,
         Text:   "✅ 处理完成！",
         ReplyParameters: &models.ReplyParameters{MessageID: update.Message.ID},
     })
+  }()
 }
 
 func (h *BotHandler) handleDelete(ctx context.Context, b *bot.Bot, update *models.Update) {
+	// 启动异步 Goroutine
+    go func() {
+        // 使用不超时的 Background Context
+        bgCtx := context.Background()
+		
     userID := update.Message.From.ID
     // 鉴权
     if userID != 8040798522 && userID != 6874581126 { 
-        b.SendMessage(ctx, &bot.SendMessageParams{
+        b.SendMessage(bgCtx, &bot.SendMessageParams{
             ChatID: update.Message.Chat.ID,
             Text:   "⛔ 你没有权限执行删除操作喵~",
         })
@@ -729,7 +759,7 @@ func (h *BotHandler) handleDelete(ctx context.Context, b *bot.Bot, update *model
     // 解析 ID，格式：/delete pixiv_123456_p0
     parts := strings.Fields(text)
     if len(parts) < 2 {
-        b.SendMessage(ctx, &bot.SendMessageParams{
+        b.SendMessage(bgCtx, &bot.SendMessageParams{
             ChatID: update.Message.Chat.ID,
             Text:   "⚠️ 格式不对喵🐱！~请输入：/delete <ID>\n例如：/delete pixiv_114514_p0。再输错，小心本喵帮你格式化🐱嗷~",
         })
@@ -742,7 +772,7 @@ func (h *BotHandler) handleDelete(ctx context.Context, b *bot.Bot, update *model
     err := h.DB.DeleteImage(targetID)
     if err != nil {
         log.Printf("❌ Delete Failed: %v", err)
-        b.SendMessage(ctx, &bot.SendMessageParams{
+        b.SendMessage(bgCtx, &bot.SendMessageParams{
             ChatID: update.Message.Chat.ID,
             Text:   fmt.Sprintf("🐱不好了喵~❌ 删除失败: %v", err),
         })
@@ -750,11 +780,12 @@ func (h *BotHandler) handleDelete(ctx context.Context, b *bot.Bot, update *model
     }
 
     log.Printf("🗑️ Image deleted: %s", targetID)
-    b.SendMessage(ctx, &bot.SendMessageParams{
+    b.SendMessage(bgCtx, &bot.SendMessageParams{
         ChatID: update.Message.Chat.ID,
         Text:   fmt.Sprintf("🗑️🐱Yuki猫猫已经帮主人清理干净了喵~!🐱图片 `%s` 已从数据库移除。", targetID),
         ParseMode: models.ParseModeMarkdown,
     })
+ }()
 }
 
 
