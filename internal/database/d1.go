@@ -5,6 +5,7 @@ import (
 	"log"
 	"my-bot-go/internal/config"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/go-resty/resty/v2"
@@ -14,6 +15,7 @@ type D1Client struct {
 	client  *resty.Client
 	cfg     *config.Config
 	History map[string]bool
+	mu       sync.RWMutex
 	lastPush  time.Time
 }
 
@@ -36,12 +38,14 @@ func (d *D1Client) SyncHistory() {
 	}
 	
 	ids := strings.Split(string(resp.Body()), ",")
+	d.mu.Lock() // <---  加写锁
 	for _, id := range ids {
 		if strings.TrimSpace(id) != "" {
 			d.History[id] = true
 		}
 	}
 	log.Printf("🧠 Synced %d items from history", len(d.History))
+	d.mu.Unlock() // <--- 解写锁
 }
 
 func (d *D1Client) PushHistory() {
@@ -52,11 +56,14 @@ func (d *D1Client) PushHistory() {
 	if time.Since(d.lastPush) < 10*time.Second {
 		return
 	}
-	
+
+	d.mu.RLock() // <--- 加读锁 (只读不写)
 	var idList []string
 	for id := range d.History {
 		idList = append(idList, id)
 	}
+	d.mu.RUnlock() // <--- 解读锁
+	
 	data := strings.Join(idList, ",")
 	
 	_, err := d.client.R().
@@ -97,14 +104,20 @@ func (d *D1Client) SaveImage(postID, fileID, originID, caption, tags, source str
 	if resp.IsError() {
 		return fmt.Errorf("D1 Error: %s", resp.String())
 	}
-	
+
+	d.mu.Lock() // <--- 加写锁
 	d.History[postID] = true
+	d.mu.Unlock() // <--- 解写锁
 	return nil
 }
 
 func (d *D1Client) CheckExists(postID string) bool {
 	// 1. 第一道防线：查内存 (速度快)
-	if d.History[postID] {
+	d.mu.RLock() // <--- 加读锁
+	exists := d.History[postID]
+	d.mu.RUnlock() // <--- 解读锁
+	
+	if exists {
 		return true
 	}
 
@@ -141,7 +154,9 @@ func (d *D1Client) CheckExists(postID string) bool {
 	}
 
 	if strings.Contains(cleanStr, "\"success\":true") {
+		d.mu.Lock() // <--- 加写锁 
 		d.History[postID] = true
+		d.mu.Unlock() // <--- 解写锁
 		return true
 	}
 
@@ -175,8 +190,10 @@ func (d *D1Client) DeleteImage(postID string) error {
     if resp.IsError() {
         return fmt.Errorf("D1 API Error: %s", resp.String())
     }
-	
+
+	d.mu.Lock() // <--- 加写锁
     delete(d.History, postID)
+	d.mu.Unlock() // <--- 解写锁
     
     // d.PushHistory()     // 可选：立即同步一次历史记录
 
