@@ -83,7 +83,14 @@ func StartPixiv(ctx context.Context, cfg *config.Config, db *database.D1Client, 
 				sort.Sort(sort.Reverse(sort.IntSlice(ids)))
 
 				count := 0
-				for _, id := range ids {
+				for i, id := range ids {
+
+				// 检查是否超过了回溯范围，太旧了，直接跳出循环
+                if cfg.PixivCrawlRange > 0 && i >= cfg.PixivCrawlRange {
+                 log.Printf("🛑 触达回溯限制 (%d/%d)，停止处理画师 %s 的旧图", i, cfg.PixivCrawlRange, uid)
+                 break 
+                 }
+					
 					if count >= cfg.PixivLimit {
 						break
 					}
