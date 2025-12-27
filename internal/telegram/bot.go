@@ -1,367 +1,81 @@
-package telegram
-
-import (
-	"bytes"
-	"context"
-	"fmt"
-	"image"
-	"image/jpeg"
-	_ "image/png"
-	"io"
-	"log"
-	"net/http"
-	"regexp"
-	"strings"
-	"time"
-	"sync"
-
-	"my-bot-go/internal/config"
-	"my-bot-go/internal/database"
-	"my-bot-go/internal/pixiv"
-	"my-bot-go/internal/manyacg"
-	"my-bot-go/internal/yande"
-	//"my-bot-go/internal/fanbox"
-
-	"github.com/go-telegram/bot"
-	"github.com/go-telegram/bot/models"
-	"github.com/nfnt/resize"
-)
-
-type BotHandler struct {
-	API             *bot.Bot
-	Cfg             *config.Config
-	DB              *database.D1Client
-	mu              sync.RWMutex   // 🔴 新增互斥锁
-	Forwarding      bool
-	ForwardBaseID   string          	
-	ForwardIndex    int             
-	ForwardTitle    string
-	ForwardTags     string 
-    CurrentPreview  *models.Message
-    CurrentOriginal *models.Message
-}
-
-func NewBot(cfg *config.Config, db *database.D1Client) (*BotHandler, error) {
-	h := &BotHandler{Cfg: cfg, DB: db}
-
-	b, err := bot.New(cfg.BotToken)
-	if err != nil {
-		return nil, err
-	}
-
-	h.API = b
-
-	// /save
-	b.RegisterHandler(bot.HandlerTypeMessageText, "/save", bot.MatchTypeExact, h.handleSave)
-
-	// 增加 delete 指令，前缀匹配，后面要跟 ID
-    b.RegisterHandler(bot.HandlerTypeMessageText, "/delete", bot.MatchTypePrefix, h.handleDelete)
-
-	// Pixiv Link
-	b.RegisterHandler(bot.HandlerTypeMessageText, "pixiv.net/artworks/", bot.MatchTypeContains, h.handlePixivLink)
-
-	//监听 ManyACG 链接
-    b.RegisterHandler(bot.HandlerTypeMessageText, "manyacg.top/artwork/", bot.MatchTypeContains, h.handleManyacgLink)
-
-	// 监听 Yande 链接
-    b.RegisterHandler(bot.HandlerTypeMessageText, "yande.re/post/show/", bot.MatchTypeContains, h.handleYandeLink)
-
-    //b.RegisterHandler(bot.HandlerTypeMessageText, "fanbox.cc/@", bot.MatchTypeContains, h.handleFanboxLink)
-
-
-	//  /forward_start & /forward_end
-	b.RegisterHandler(bot.HandlerTypeMessageText, "/forward_start", bot.MatchTypePrefix, h.handleForwardStart)
-	b.RegisterHandler(bot.HandlerTypeMessageText, "/forward_continue", bot.MatchTypeExact, h.handleForwardContinue) // 新增
-	b.RegisterHandler(bot.HandlerTypeMessageText, "/forward_end", bot.MatchTypeExact, h.handleForwardEnd)
-
-	b.RegisterHandler(bot.HandlerTypeMessageText, "", bot.MatchTypePrefix, func(ctx context.Context, b *bot.Bot, update *models.Update) {
-		if update.Message == nil {
+c, update *models.Update) {
+	go func() {
+		bgCtx := context.Background()
+		msg := update.Message
+		userID := msg.From.ID
+		if userID != 8040798522 && userID != 6874581126 {
 			return
 		}
 
-		// 如果是指令消息，直接跳过，让后面的 Handler 去处理
-		if strings.HasPrefix(update.Message.Text, "/") {
-			return 
+		rawText := ""
+		if len(msg.Text) > len("/forward_start") {
+			rawText = strings.TrimSpace(msg.Text[len("/forward_start"):])
 		}
-		
-         // 🔴 加读锁检查状态
-        h.mu.RLock()
-        isForwarding := h.Forwarding
-        h.mu.RUnlock()
-
-        // 转发模式，拦截图片
-        if isForwarding {
-            go func() {
-                h.mu.Lock()
-                defer h.mu.Unlock()
-                
-                if !h.Forwarding { return }
-
-                msg := update.Message
-                bgCtx := context.Background() // 使用 Background Context
-			
-			// 处理图片 (Preview)
-			if len(msg.Photo) > 0 {
-				h.CurrentPreview = msg
-				// 清空残留的原图
-				h.CurrentOriginal = nil 
-				
-				log.Printf("🖼 [Forward] 收到 P%d 预览图", h.ForwardIndex)
-				b.SendMessage(bgCtx, &bot.SendMessageParams{
-					ChatID:          msg.Chat.ID,
-					Text:            fmt.Sprintf("✅ yukiyuki获取到 P%d 预览图啦，主人请发送原图文件(Document)吧，喵~🐱", h.ForwardIndex),
-					ReplyParameters: &models.ReplyParameters{MessageID: msg.ID},
-				})
-				return
-			}
-
-			// 处理文件 (Original)
-			if msg.Document != nil {
-				if h.CurrentPreview == nil {
-					// 如果没发预览图直接发文件，把文件同时作为预览和原图
-					h.CurrentPreview = msg
-					h.CurrentOriginal = msg
-				} else {
-					h.CurrentOriginal = msg
-				}
-				
-				log.Printf("📄 [Forward] 收到 P%d 原图", h.ForwardIndex)
-				b.SendMessage(bgCtx, &bot.SendMessageParams{
-					ChatID:          msg.Chat.ID,
-					Text:            fmt.Sprintf("✅ P%d 就绪了喵~🐱。\n请输入 /forward_continue 发布并继续下一张\n或 /forward_end 发布并结束（^v^）。", h.ForwardIndex),
-					ReplyParameters: &models.ReplyParameters{MessageID: msg.ID},
-				})
-				return
-			}
-			return
+		title := rawText
+		tags := ""
+		firstHashIndex := strings.Index(rawText, "#")
+		if firstHashIndex != -1 {
+			title = strings.TrimSpace(rawText[:firstHashIndex])
+			tags = strings.TrimSpace(rawText[firstHashIndex:])
 		}
 
-		// 2. 非转发模式的手动处理
-		if len(update.Message.Photo) > 0 {
-		   go func() {
-			   // 为了统一，用 context.Background()
-			 h.handleManual(context.Background(), b, update)
-		   }()
-		}
-	})
+		// 初始化状态
+		h.mu.Lock()
+		h.Forwarding = true
+		h.ForwardBaseID = fmt.Sprintf("manual_%d", msg.ID)
+		h.ForwardIndex = 0
+		h.ForwardTitle = title
+		h.ForwardTags = tags
+		h.CurrentPreview = nil
+		h.CurrentOriginal = nil
+		h.mu.Unlock()
 
-	return h, nil
-}
+		info := fmt.Sprintf("✅ **转发模式已启动**\n🆔 BaseID: `%s`\n📝 标题: %s\n🏷 标签: %s\n\n🐱 请发送 **首张预览图**吧,喵~(^v^)",
+			h.ForwardBaseID, title, tags)
 
-func (h *BotHandler) Start(ctx context.Context) {
-	h.API.Start(ctx)
-}
-
-func (h *BotHandler) downloadFile(ctx context.Context, fileID string) ([]byte, error) {
-	file, err := h.API.GetFile(ctx, &bot.GetFileParams{FileID: fileID})
-	if err != nil {
-		return nil, err
-	}
-	url := fmt.Sprintf("https://api.telegram.org/file/bot%s/%s", h.Cfg.BotToken, file.FilePath)
-	resp, err := http.Get(url)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-	return io.ReadAll(resp.Body)
-}
-
-func (h *BotHandler) ProcessAndSend(ctx context.Context, imgData []byte, postID, tags, caption, source string, width, height int) {
-	if h.DB.History[postID] {
-		log.Printf("⏭️ Skip %s: already in history", postID)
-		return
-	}
-	const MaxPhotoSize = 9 * 1024 * 1024
-	shouldCompress := int64(len(imgData)) > MaxPhotoSize || (width > 4950 || height > 4950)
-	finalData := imgData
-
-	if shouldCompress {
-		log.Printf("⚠️ Image %s needs processing (Size: %.2f MB, Dim: %dx%d)...", postID, float64(len(imgData))/1024/1024, width, height)
-		compressed, err := compressImage(imgData, MaxPhotoSize)
-		if err != nil {
-			log.Printf("❌ Compression failed: %v. Trying original...", err)
-		} else {
-			finalData = compressed
-		}
-	}
-
-	params := &bot.SendPhotoParams{
-		ChatID:  h.Cfg.ChannelID,
-		Photo:   &models.InputFileUpload{Filename: source + ".jpg", Data: bytes.NewReader(finalData)},
-		Caption: caption,
-	}
-
-	msg, err := h.API.SendPhoto(ctx, params)
-	if err != nil {
-		log.Printf("❌ Telegram Send Failed [%s]: %v", postID, err)
-		return
-	}
-
-	if len(msg.Photo) == 0 {
-		return
-	}
-	fileID := msg.Photo[len(msg.Photo)-1].FileID
-
-	docParams := &bot.SendDocumentParams{
-		ChatID: h.Cfg.ChannelID,
-		Document: &models.InputFileUpload{
-			Filename: source + "_original.jpg",
-			Data:     bytes.NewReader(imgData),
-		},
-		ReplyParameters: &models.ReplyParameters{
-			MessageID: msg.ID,
-		},
-		Caption: "⬇️ Original File",
-	}
-
-	var originFileID string
-	msgDoc, errDoc := h.API.SendDocument(ctx, docParams)
-	if errDoc != nil {
-		log.Printf("⚠️ SendDocument Failed (Will only save preview): %v", errDoc)
-		originFileID = ""
-	} else {
-		originFileID = msgDoc.Document.FileID
-	}
-
-	err = h.DB.SaveImage(postID, fileID, originFileID, caption, tags, source, width, height)
-	if err != nil {
-		log.Printf("❌ D1 Save Failed: %v", err)
-	} else {
-		log.Printf("✅ Saved: %s (Preview + Origin)", postID)
-	}
-}
-
-func (h *BotHandler) handleSave(ctx context.Context, b *bot.Bot, update *models.Update) {
-	userID := update.Message.From.ID
-	if userID != 8040798522 && userID != 6874581126 {
-		log.Printf("⛔ Unauthorized /save attempt from UserID: %d", userID)
-		return
-	}
-	log.Printf("💾 Manual save triggered by UserID: %d", userID)
-	if h.DB != nil {
-		h.DB.PushHistory()
-		b.SendMessage(ctx, &bot.SendMessageParams{
-			ChatID: update.Message.Chat.ID,
-			Text:   "✅ History successfully saved to Cloudflare D1!",
+		b.SendMessage(bgCtx, &bot.SendMessageParams{
+			ChatID: msg.Chat.ID,
+			Text:   info,
 		})
-	} else {
-		b.SendMessage(ctx, &bot.SendMessageParams{
-			ChatID: update.Message.Chat.ID,
-			Text:   "❌ Database client is not initialized.",
-		})
-	}
-}
-
-func (h *BotHandler) handleManual(ctx context.Context, b *bot.Bot, update *models.Update) {
-	if update.Message == nil || len(update.Message.Photo) == 0 {
-		return
-	}
-	photo := update.Message.Photo[len(update.Message.Photo)-1]
-	postID := fmt.Sprintf("manual_%d", update.Message.ID)
-	caption := update.Message.Caption
-	if caption == "" {
-		caption = "MtcACG:TG"
-	}
-	msg, err := b.SendPhoto(ctx, &bot.SendPhotoParams{
-		ChatID:  h.Cfg.ChannelID,
-		Photo:   &models.InputFileString{Data: photo.FileID},
-		Caption: caption,
-	})
-	if err != nil {
-		b.SendMessage(ctx, &bot.SendMessageParams{
-			ChatID: update.Message.Chat.ID,
-			Text:   "❌ Forward failed: " + err.Error(),
-		})
-		return
-	}
-	finalFileID := msg.Photo[len(msg.Photo)-1].FileID
-	width := photo.Width
-	height := photo.Height
-	h.DB.SaveImage(postID, finalFileID, "", caption, "TG-forward", "TG-C", width, height)
-	b.SendMessage(ctx, &bot.SendMessageParams{
-		ChatID:          update.Message.Chat.ID,
-		Text:            "✅ handleManual Saved to D1!",
-		ReplyParameters: &models.ReplyParameters{MessageID: update.Message.ID},
-	})
-}
-
-
-func (h *BotHandler) handleForwardStart(ctx context.Context, b *bot.Bot, update *models.Update) {
-	// 🔴 启动异步
-    go func() {
-        bgCtx := context.Background()
-	    msg := update.Message
-	    userID := msg.From.ID
-	if userID != 8040798522 && userID != 6874581126 { 
-		return
-	}
-
-	rawText := ""
-	if len(msg.Text) > len("/forward_start") {
-		rawText = strings.TrimSpace(msg.Text[len("/forward_start"):])
-	}
-	title := rawText
-	tags := ""
-	firstHashIndex := strings.Index(rawText, "#")
-	if firstHashIndex != -1 {
-		title = strings.TrimSpace(rawText[:firstHashIndex])
-		tags = strings.TrimSpace(rawText[firstHashIndex:])
-	}
-
-	// 初始化状态
-	h.mu.Lock()
-	h.Forwarding = true
-	h.ForwardBaseID = fmt.Sprintf("manual_%d", msg.ID)
-	h.ForwardIndex = 0
-	h.ForwardTitle = title
-	h.ForwardTags = tags
-	h.CurrentPreview = nil
-	h.CurrentOriginal = nil
-	h.mu.Unlock()
-
-	info := fmt.Sprintf("✅ **转发模式已启动**\n🆔 BaseID: `%s`\n📝 标题: %s\n🏷 标签: %s\n\n🐱 请发送 **首张预览图**吧,喵~(^v^)", 
-		h.ForwardBaseID, title, tags)
-
-	b.SendMessage(bgCtx, &bot.SendMessageParams{
-		ChatID:    msg.Chat.ID,
-		Text:      info,
-		///ParseMode: models.ParseModeMarkdown,
-	})
+	}()
 }
 
 func (h *BotHandler) publishCurrentItem(ctx context.Context, b *bot.Bot, chatID int64) bool {
-	// 🔴 1. 快速读取所有需要的状态，然后立马解锁
-    h.mu.RLock()
+	// 🔴 1. 快速读取所有需要的状态
+	h.mu.RLock()
 	preview := h.CurrentPreview
-    original := h.CurrentOriginal
-    baseID := h.ForwardBaseID
-    index := h.ForwardIndex
-    title := h.ForwardTitle
-    tags := h.ForwardTags
-    h.mu.RUnlock()
-	
-	if h.CurrentPreview == nil {
+	original := h.CurrentOriginal
+	baseID := h.ForwardBaseID
+	index := h.ForwardIndex
+	title := h.ForwardTitle
+	tags := h.ForwardTags
+	h.mu.RUnlock()
+
+	if preview == nil {
 		b.SendMessage(ctx, &bot.SendMessageParams{ChatID: chatID, Text: "⚠️ 嗷，出错啦：当前没有等待发布的图片哦，没办法继续了喵~。"})
 		return false
 	}
 
 	postID := fmt.Sprintf("%s_p%d", baseID, index)
-	
-	// 构造标题
+
 	caption := title
-	if caption == "" { caption = "MtcACG:TG" }
+	if caption == "" {
+		caption = "MtcACG:TG"
+	}
 	caption = fmt.Sprintf("%s [P%d]", caption, index)
 	if tags != "" {
 		caption = caption + "\n" + tags
 	}
 
 	dbTags := tags
-	if dbTags == "" { dbTags = "TG-Forward" }
+	if dbTags == "" {
+		dbTags = "TG-Forward"
+	}
 
 	var previewFileID, originFileID string
 	var width, height int
 
-	// 发送预览图到频道
+	// 发送预览图
 	if len(preview.Photo) > 0 {
 		srcPhoto := preview.Photo[len(preview.Photo)-1]
 		fwdMsg, err := b.SendPhoto(ctx, &bot.SendPhotoParams{
@@ -376,8 +90,8 @@ func (h *BotHandler) publishCurrentItem(ctx context.Context, b *bot.Bot, chatID 
 		previewFileID = fwdMsg.Photo[len(fwdMsg.Photo)-1].FileID
 		width = srcPhoto.Width
 		height = srcPhoto.Height
-		
-		if h.CurrentOriginal != nil && h.CurrentOriginal.Document != nil {
+
+		if original != nil && original.Document != nil {
 			originFileID = original.Document.FileID
 		}
 	} else if preview.Document != nil {
@@ -392,7 +106,7 @@ func (h *BotHandler) publishCurrentItem(ctx context.Context, b *bot.Bot, chatID 
 			return false
 		}
 		previewFileID = fwdMsg.Document.FileID
-		originFileID = fwdMsg.Document.FileID 
+		originFileID = fwdMsg.Document.FileID
 		if fwdMsg.Document.Thumbnail != nil {
 			width = fwdMsg.Document.Thumbnail.Width
 			height = fwdMsg.Document.Thumbnail.Height
@@ -418,89 +132,82 @@ func (h *BotHandler) publishCurrentItem(ctx context.Context, b *bot.Bot, chatID 
 		b.SendMessage(ctx, &bot.SendMessageParams{ChatID: chatID, Text: "❌ 糟了！数据库保存失败，流程暂停。喵呜(^x_x^)"})
 		return false
 	}
-	
+
 	log.Printf("✅ Published: %s", postID)
 	return true
 }
 
-// 3. 继续下一张
 func (h *BotHandler) handleForwardContinue(ctx context.Context, b *bot.Bot, update *models.Update) {
 	go func() {
-        bgCtx := context.Background()
-	h.mu.RLock()
-	if !h.Forwarding {
+		bgCtx := context.Background()
+		h.mu.RLock()
+		if !h.Forwarding {
+			h.mu.RUnlock()
+			return
+		}
 		h.mu.RUnlock()
-		return 
-	}
-	h.mu.RUnlock()
-	chatID := update.Message.Chat.ID
+		chatID := update.Message.Chat.ID
 
-	// 尝试发布当前缓存的图片
-	success := h.publishCurrentItem(bgCtx, b, chatID)
-	if !success {
-		return
-	}
+		success := h.publishCurrentItem(bgCtx, b, chatID)
+		if !success {
+			return
+		}
 
-	// 更新索引，清空缓存
-	h.mu.Lock()
-	prevIndex := h.ForwardIndex
-	h.ForwardIndex++
-	h.CurrentPreview = nil
-	h.CurrentOriginal = nil
-	h.mu.Unlock()
+		h.mu.Lock()
+		prevIndex := h.ForwardIndex
+		h.ForwardIndex++
+		h.CurrentPreview = nil
+		h.CurrentOriginal = nil
+		h.mu.Unlock()
 
-	b.SendMessage(bgCtx, &bot.SendMessageParams{
-		ChatID: chatID,
-		Text:   fmt.Sprintf("✅ **P%d 已发布** (ID: `%s_p%d`)\n⬇️ 正在等待 **P%d** ...", prevIndex, h.ForwardBaseID, prevIndex, h.ForwardIndex),
-		//ParseMode: models.ParseModeMarkdown,
-	})
- }()
+		b.SendMessage(bgCtx, &bot.SendMessageParams{
+			ChatID: chatID,
+			Text:   fmt.Sprintf("✅ **P%d 已发布** (ID: `%s_p%d`)\n⬇️ 正在等待 **P%d** ...", prevIndex, h.ForwardBaseID, prevIndex, h.ForwardIndex),
+		})
+	}()
 }
 
-// 4. 结束会话
 func (h *BotHandler) handleForwardEnd(ctx context.Context, b *bot.Bot, update *models.Update) {
 	go func() {
-        bgCtx := context.Background()
-	h.mu.RLock()
-	if !h.Forwarding {
-		h.mu.RUnlock()
-		return 
-	}
-	h.mu.RUnlock()
-		
-	chatID := update.Message.Chat.ID
-
-	// 检查是否还有最后一张未发布
-	if h.CurrentPreview != nil {
-		success := h.publishCurrentItem(bgCtx, b, chatID)
-		if success {
-			h.mu.RLock()
-			idx := h.ForwardIndex
+		bgCtx := context.Background()
+		h.mu.RLock()
+		if !h.Forwarding {
 			h.mu.RUnlock()
-			b.SendMessage(bgCtx, &bot.SendMessageParams{
-				ChatID: chatID,
-				Text:   fmt.Sprintf("✅ **P%d (尾图) 已发布**", idx),
-				//ParseMode: models.ParseModeMarkdown,
-			})
+			return
 		}
-	}
+		h.mu.RUnlock()
 
-	// 清理状态
-	h.mu.Lock()
-	h.Forwarding = false
-	h.ForwardBaseID = ""
-	h.ForwardIndex = 0
-	h.CurrentPreview = nil
-	h.CurrentOriginal = nil
-	h.ForwardTitle = ""
-	h.ForwardTags = ""
-	h.mu.Unlock()
+		chatID := update.Message.Chat.ID
 
-	b.SendMessage(bgCtx, &bot.SendMessageParams{
-		ChatID: chatID,
-		Text:   "🏁 🐱好耶（^-^）**任务完成喵~** 🐱",
-		ParseMode: models.ParseModeMarkdown,
-	})
+		if h.CurrentPreview != nil {
+			success := h.publishCurrentItem(bgCtx, b, chatID)
+			if success {
+				h.mu.RLock()
+				idx := h.ForwardIndex
+				h.mu.RUnlock()
+				b.SendMessage(bgCtx, &bot.SendMessageParams{
+					ChatID: chatID,
+					Text:   fmt.Sprintf("✅ **P%d (尾图) 已发布**", idx),
+				})
+			}
+		}
+
+		h.mu.Lock()
+		h.Forwarding = false
+		h.ForwardBaseID = ""
+		h.ForwardIndex = 0
+		h.CurrentPreview = nil
+		h.CurrentOriginal = nil
+		h.ForwardTitle = ""
+		h.ForwardTags = ""
+		h.mu.Unlock()
+
+		b.SendMessage(bgCtx, &bot.SendMessageParams{
+			ChatID:    chatID,
+			Text:      "🏁 🐱好耶（^-^）**任务完成喵~** 🐱",
+			ParseMode: models.ParseModeMarkdown,
+		})
+	}()
 }
 
 func compressImage(data []byte, targetSize int64) ([]byte, error) {
@@ -542,308 +249,265 @@ func (h *BotHandler) handlePixivLink(ctx context.Context, b *bot.Bot, update *mo
 		return
 	}
 
-	// 启动异步 Goroutine
-    go func() {
-        bgCtx := context.Background()
-		
-	text := update.Message.Text
-	re := regexp.MustCompile(`artworks/(\d+)`)
-	matches := re.FindStringSubmatch(text)
-	if len(matches) < 2 {
-		return
-	}
-	illustID := matches[1]
+	go func() {
+		bgCtx := context.Background()
 
-	loadingMsg, _ := b.SendMessage(bgCtx, &bot.SendMessageParams{
-		ChatID:          update.Message.Chat.ID,
-		Text:            "⏳ 正在抓取 Pixiv ID 了喵~🐱: " + illustID + " ...",
-		ReplyParameters: &models.ReplyParameters{MessageID: update.Message.ID},
-	})
+		text := update.Message.Text
+		re := regexp.MustCompile(`artworks/(\d+)`)
+		matches := re.FindStringSubmatch(text)
+		if len(matches) < 2 {
+			return
+		}
+		illustID := matches[1]
 
-	illust, err := pixiv.GetIllust(illustID, h.Cfg.PixivPHPSESSID)
-	if err != nil {
+		loadingMsg, _ := b.SendMessage(bgCtx, &bot.SendMessageParams{
+			ChatID:          update.Message.Chat.ID,
+			Text:            "⏳ 正在抓取 Pixiv ID 了喵~🐱: " + illustID + " ...",
+			ReplyParameters: &models.ReplyParameters{MessageID: update.Message.ID},
+		})
+
+		illust, err := pixiv.GetIllust(illustID, h.Cfg.PixivPHPSESSID)
+		if err != nil {
+			b.SendMessage(bgCtx, &bot.SendMessageParams{
+				ChatID: update.Message.Chat.ID,
+				Text:   "❌ 获取失败: " + err.Error(),
+			})
+			return
+		}
+
+		successCount := 0
+		skippedCount := 0
+
+		for i, page := range illust.Pages {
+			imgData, err := pixiv.DownloadImage(page.Urls.Original, h.Cfg.PixivPHPSESSID)
+			if err != nil {
+				fmt.Printf("❌ Pixiv Download Failed: %v\n", err)
+				continue
+			}
+			pid := fmt.Sprintf("pixiv_%s_p%d", illust.ID, i)
+			caption := fmt.Sprintf("Pixiv: %s [P%d/%d]\nArtist: %s\nTags: #%s",
+				illust.Title, i+1, len(illust.Pages),
+				illust.Artist,
+				strings.ReplaceAll(illust.Tags, " ", " #"))
+
+			if h.DB.CheckExists(pid) {
+				skippedCount++
+				continue
+			}
+			h.ProcessAndSend(bgCtx, imgData, pid, illust.Tags, caption, "pixiv", page.Width, page.Height)
+			successCount++
+			time.Sleep(1 * time.Second)
+		}
+
+		finalText := fmt.Sprintf("✅ 处理完成了喵~🐱！\n成功发送: %d 张\n跳过重复: %d 张", successCount, skippedCount)
 		b.SendMessage(bgCtx, &bot.SendMessageParams{
 			ChatID: update.Message.Chat.ID,
-			Text:   "❌ 获取失败: " + err.Error(),
+			Text:   finalText,
 		})
-		return
-	}
 
-	successCount := 0
-	skippedCount := 0
-
-	for i, page := range illust.Pages {
-		imgData, err := pixiv.DownloadImage(page.Urls.Original, h.Cfg.PixivPHPSESSID)
-		if err != nil {
-			fmt.Printf("❌ Pixiv Download Failed: %v\n", err)
-			continue
+		if loadingMsg != nil {
+			b.DeleteMessage(bgCtx, &bot.DeleteMessageParams{
+				ChatID:    update.Message.Chat.ID,
+				MessageID: loadingMsg.ID,
+			})
 		}
-		pid := fmt.Sprintf("pixiv_%s_p%d", illust.ID, i)
-		caption := fmt.Sprintf("Pixiv: %s [P%d/%d]\nArtist: %s\nTags: #%s",
-			illust.Title, i+1, len(illust.Pages),
-			illust.Artist,
-			strings.ReplaceAll(illust.Tags, " ", " #"))
-
-		if h.DB.CheckExists(pid) {
-			skippedCount++
-			continue
-		}
-		h.ProcessAndSend(bgCtx, imgData, pid, illust.Tags, caption, "pixiv", page.Width, page.Height)
-		successCount++
-		time.Sleep(1 * time.Second)
-	}
-
-	finalText := fmt.Sprintf("✅ 处理完成了喵~🐱！\n成功发送: %d 张\n跳过重复: %d 张", successCount, skippedCount)
-	b.SendMessage(bgCtx, &bot.SendMessageParams{
-		ChatID: update.Message.Chat.ID,
-		Text:   finalText,
-	})
-
-	if loadingMsg != nil {
-		b.DeleteMessage(bgCtx, &bot.DeleteMessageParams{
-			ChatID:    update.Message.Chat.ID,
-			MessageID: loadingMsg.ID,
-		})
-	 }
-  }()
+	}()
 }
 
 func (h *BotHandler) handleManyacgLink(ctx context.Context, b *bot.Bot, update *models.Update) {
-	// ✅ 关键修改：如果当前正在转发模式，忽略链接，防止冲突
 	if h.Forwarding {
 		return
 	}
 
-	// 启动异步 Goroutine
-    go func() {
-        bgCtx := context.Background()
+	go func() {
+		bgCtx := context.Background()
 
-	text := update.Message.Text
+		text := update.Message.Text
+		re := regexp.MustCompile(`manyacg\.top/artwork/[a-zA-Z0-9]+`)
+		matches := re.FindStringSubmatch(text)
+		if len(matches) < 1 {
+			return
+		}
+		artworkURL := matches[0]
 
-	// 1. 提取 ManyACG 链接
-	re := regexp.MustCompile(`manyacg\.top/artwork/[a-zA-Z0-9]+`)
-	matches := re.FindStringSubmatch(text)
-	if len(matches) < 1 {
-		return
-	}
-	artworkURL := matches[0]
+		loadingMsg, _ := b.SendMessage(bgCtx, &bot.SendMessageParams{
+			ChatID:          update.Message.Chat.ID,
+			Text:            "⏳ 正在抓取 ManyACG 链接...了 喵~🐱",
+			ReplyParameters: &models.ReplyParameters{MessageID: update.Message.ID},
+		})
 
-	// 提示用户正在处理
-	loadingMsg, _ := b.SendMessage(bgCtx, &bot.SendMessageParams{
-		ChatID: update.Message.Chat.ID,
-		Text:   "⏳ 正在抓取 ManyACG 链接...了 喵~🐱",
-		ReplyParameters: &models.ReplyParameters{MessageID: update.Message.ID},
-	})
+		artwork, err := manyacg.GetArtworkInfo(artworkURL)
+		if err != nil {
+			b.SendMessage(bgCtx, &bot.SendMessageParams{
+				ChatID: update.Message.Chat.ID,
+				Text:   "❌ 获取失败: " + err.Error(),
+			})
+			return
+		}
 
-	// 2. 调用 manyacg 包获取信息
-	artwork, err := manyacg.GetArtworkInfo(artworkURL)
-	if err != nil {
+		successCount := 0
+		skippedCount := 0
+
+		for i, pic := range artwork.Pictures {
+			imgData, err := manyacg.DownloadOriginal(bgCtx, pic.ID)
+			if err != nil {
+				fmt.Printf("❌ ManyACG Download Failed: %v\n", err)
+				continue
+			}
+
+			pid := fmt.Sprintf("mtcacg_%s_p%d", artwork.ID, i)
+			caption := fmt.Sprintf("MtcACG: %s [P%d/%d]\nArtist: %s\nTags: %s",
+				artwork.Title, i+1, len(artwork.Pictures),
+				artwork.Artist,
+				manyacg.FormatTags(artwork.Tags))
+
+			if h.DB.CheckExists(pid) {
+				skippedCount++
+				continue
+			}
+
+			h.ProcessAndSend(bgCtx, imgData, pid, manyacg.FormatTags(artwork.Tags), caption, "manyacg", pic.Width, pic.Height)
+			successCount++
+			time.Sleep(1 * time.Second)
+		}
+
+		finalText := fmt.Sprintf("✅ 处理完成了喵~🐱！\n成功发送: %d 张\n跳过重复: %d 张", successCount, skippedCount)
 		b.SendMessage(bgCtx, &bot.SendMessageParams{
 			ChatID: update.Message.Chat.ID,
-			Text:   "❌ 获取失败: " + err.Error(),
+			Text:   finalText,
 		})
+
+		if loadingMsg != nil {
+			b.DeleteMessage(bgCtx, &bot.DeleteMessageParams{
+				ChatID:    update.Message.Chat.ID,
+				MessageID: loadingMsg.ID,
+			})
+		}
+	}()
+}
+
+func (h *BotHandler) handleYandeLink(ctx context.Context, b *bot.Bot, update *models.Update) {
+	if h.Forwarding {
 		return
 	}
 
-	// 3. 循环发送每一张图
-	successCount := 0
-	skippedCount := 0
+	go func() {
+		bgCtx := context.Background()
 
-	for i, pic := range artwork.Pictures {
-		// 下载原图
-		imgData, err := manyacg.DownloadOriginal(bgCtx, pic.ID)
-		if err != nil {
-			fmt.Printf("❌ ManyACG Download Failed: %v\n", err)
-			continue
+		text := update.Message.Text
+		re := regexp.MustCompile(`post/show/(\d+)`)
+		matches := re.FindStringSubmatch(text)
+		if len(matches) < 2 {
+			return
 		}
 
-		// 构造唯一的 PID: mtcacg_123456_p0
-		pid := fmt.Sprintf("mtcacg_%s_p%d", artwork.ID, i)
+		postID := matches[1]
+		pid := fmt.Sprintf("yande_%s", postID)
 
-		// 构造标题
-		caption := fmt.Sprintf("MtcACG: %s [P%d/%d]\nArtist: %s\nTags: %s",
-			artwork.Title, i+1, len(artwork.Pictures),
-			artwork.Artist,
-			manyacg.FormatTags(artwork.Tags))
-
-		// 检查数据库去重
 		if h.DB.CheckExists(pid) {
-			skippedCount++
-			continue
+			b.SendMessage(bgCtx, &bot.SendMessageParams{
+				ChatID:          update.Message.Chat.ID,
+				Text:            "⏭️ 这张图已经发过了哦 (ID: " + pid + ")，跳过。",
+				ReplyParameters: &models.ReplyParameters{MessageID: update.Message.ID},
+			})
+			return
 		}
 
-		// 发送
-		h.ProcessAndSend(bgCtx, imgData, pid, manyacg.FormatTags(artwork.Tags), caption, "manyacg", pic.Width, pic.Height)
-		successCount++
-
-		// 稍微歇一下
-		time.Sleep(1 * time.Second)
-	}
-
-	// 4. 反馈结果
-	finalText := fmt.Sprintf("✅ 处理完成了喵~🐱！\n成功发送: %d 张\n跳过重复: %d 张", successCount, skippedCount)
-	b.SendMessage(bgCtx, &bot.SendMessageParams{
-		ChatID: update.Message.Chat.ID,
-		Text:   finalText,
-	})
-
-	// 删掉那个“正在抓取”的提示（可选）
-	if loadingMsg != nil {
-		b.DeleteMessage(bgCtx, &bot.DeleteMessageParams{
-			ChatID:    update.Message.Chat.ID,
-			MessageID: loadingMsg.ID,
+		loadingMsg, _ := b.SendMessage(bgCtx, &bot.SendMessageParams{
+			ChatID:          update.Message.Chat.ID,
+			Text:            "⏳ 正在抓取 Yande ID 了喵~🐱: " + postID + " ...",
+			ReplyParameters: &models.ReplyParameters{MessageID: update.Message.ID},
 		})
-	}
-  }()
-}
 
-// ✅ 新增处理函数
-func (h *BotHandler) handleYandeLink(ctx context.Context, b *bot.Bot, update *models.Update) {
-    if h.Forwarding {
-        return
-    }
+		post, err := yande.GetYandePost(postID)
+		if err != nil {
+			b.SendMessage(bgCtx, &bot.SendMessageParams{
+				ChatID: update.Message.Chat.ID,
+				Text:   "❌ 获取失败: " + err.Error(),
+			})
+			if loadingMsg != nil {
+				b.DeleteMessage(bgCtx, &bot.DeleteMessageParams{ChatID: update.Message.Chat.ID, MessageID: loadingMsg.ID})
+			}
+			return
+		}
 
-	// 启动异步 Goroutine
-    go func() {
-        bgCtx := context.Background()
+		imgURL := yande.SelectBestURL(post)
+		imgData, err := yande.DownloadYandeImage(imgURL)
+		if err != nil {
+			b.SendMessage(bgCtx, &bot.SendMessageParams{
+				ChatID: update.Message.Chat.ID,
+				Text:   "❌ 下载图片失败: " + err.Error(),
+			})
+			if loadingMsg != nil {
+				b.DeleteMessage(bgCtx, &bot.DeleteMessageParams{ChatID: update.Message.Chat.ID, MessageID: loadingMsg.ID})
+			}
+			return
+		}
 
-    text := update.Message.Text
-    // 正则匹配 ID
-    re := regexp.MustCompile(`post/show/(\d+)`)
-    matches := re.FindStringSubmatch(text)
-    if len(matches) < 2 {
-        return
-    }
+		tags := strings.ReplaceAll(post.Tags, " ", " #")
+		caption := fmt.Sprintf("Yande: %d\nSize: %dx%d\nTags: #%s",
+			post.ID, post.Width, post.Height, tags)
 
-    postID := matches[1]
-    
-    // 构造 PID (先构造出来去查重)
-    // 注意：ID是字符串转int，这里我们假设正则抓到的数字是合法的
-    // 最好还是转一下 int 保持一致性，虽然字符串拼接也行
-    pid := fmt.Sprintf("yande_%s", postID)
+		h.ProcessAndSend(bgCtx, imgData, pid, post.Tags, caption, "yande", post.Width, post.Height)
 
-    // ✅ 1. 先查重
-    if h.DB.CheckExists(pid) {
-        b.SendMessage(bgCtx, &bot.SendMessageParams{
-            ChatID:             update.Message.Chat.ID,
-            Text:               "⏭️ 这张图已经发过了哦 (ID: " + pid + ")，跳过。",
-            ReplyParameters:    &models.ReplyParameters{MessageID: update.Message.ID},
-        })
-        return // 直接结束
-    }
+		if loadingMsg != nil {
+			b.DeleteMessage(bgCtx, &bot.DeleteMessageParams{
+				ChatID:    update.Message.Chat.ID,
+				MessageID: loadingMsg.ID,
+			})
+		}
 
-    // 提示正在抓取
-    loadingMsg, _ := b.SendMessage(bgCtx, &bot.SendMessageParams{
-        ChatID:             update.Message.Chat.ID,
-        Text:               "⏳ 正在抓取 Yande ID 了喵~🐱: " + postID + " ...",
-        ReplyParameters:    &models.ReplyParameters{MessageID: update.Message.ID},
-    })
-
-    // 2. 获取详情
-    post, err := yande.GetYandePost(postID)
-    if err != nil {
-        b.SendMessage(bgCtx, &bot.SendMessageParams{
-            ChatID: update.Message.Chat.ID,
-            Text:   "❌ 获取失败: " + err.Error(),
-        })
-        // 删掉 loading 消息
-        if loadingMsg != nil {
-            b.DeleteMessage(bgCtx, &bot.DeleteMessageParams{ChatID: update.Message.Chat.ID, MessageID: loadingMsg.ID})
-        }
-        return
-    }
-
-    // 3. 下载图片
-    imgURL := yande.SelectBestURL(post)
-    imgData, err := yande.DownloadYandeImage(imgURL)
-    if err != nil {
-        b.SendMessage(bgCtx, &bot.SendMessageParams{
-            ChatID: update.Message.Chat.ID,
-            Text:   "❌ 下载图片失败: " + err.Error(),
-        })
-        if loadingMsg != nil {
-            b.DeleteMessage(bgCtx, &bot.DeleteMessageParams{ChatID: update.Message.Chat.ID, MessageID: loadingMsg.ID})
-        }
-        return
-    }
-
-    // 4. 构造发送参数
-    tags := strings.ReplaceAll(post.Tags, " ", " #")
-    caption := fmt.Sprintf("Yande: %d\nSize: %dx%d\nTags: #%s", 
-        post.ID, post.Width, post.Height, tags)
-
-    // 5. 发送并保存
-    h.ProcessAndSend(bgCtx, imgData, pid, post.Tags, caption, "yande", post.Width, post.Height)
-
-    // 6. 完成反馈
-    if loadingMsg != nil {
-        b.DeleteMessage(bgCtx, &bot.DeleteMessageParams{
-            ChatID:    update.Message.Chat.ID,
-            MessageID: loadingMsg.ID,
-        })
-    }
-    
-    b.SendMessage(bgCtx, &bot.SendMessageParams{
-        ChatID: update.Message.Chat.ID,
-        Text:   "✅ 处理完成！",
-        ReplyParameters: &models.ReplyParameters{MessageID: update.Message.ID},
-    })
-  }()
+		b.SendMessage(bgCtx, &bot.SendMessageParams{
+			ChatID:          update.Message.Chat.ID,
+			Text:            "✅ 处理完成！",
+			ReplyParameters: &models.ReplyParameters{MessageID: update.Message.ID},
+		})
+	}()
 }
 
 func (h *BotHandler) handleDelete(ctx context.Context, b *bot.Bot, update *models.Update) {
-	// 启动异步 Goroutine
-    go func() {
-        // 使用不超时的 Background Context
-        bgCtx := context.Background()
-		
-    userID := update.Message.From.ID
-    // 鉴权
-    if userID != 8040798522 && userID != 6874581126 { 
-        b.SendMessage(bgCtx, &bot.SendMessageParams{
-            ChatID: update.Message.Chat.ID,
-            Text:   "⛔ 你没有权限执行删除操作喵~",
-        })
-        return
-    }
+	go func() {
+		bgCtx := context.Background()
 
-    text := update.Message.Text
-    // 解析 ID，格式：/delete pixiv_123456_p0
-    parts := strings.Fields(text)
-    if len(parts) < 2 {
-        b.SendMessage(bgCtx, &bot.SendMessageParams{
-            ChatID: update.Message.Chat.ID,
-            Text:   "⚠️ 格式不对喵🐱！~请输入：/delete <ID>\n例如：/delete pixiv_114514_p0。再输错，小心本喵帮你格式化🐱嗷~",
-        })
-        return
-    }
+		userID := update.Message.From.ID
+		if userID != 8040798522 && userID != 6874581126 {
+			b.SendMessage(bgCtx, &bot.SendMessageParams{
+				ChatID: update.Message.Chat.ID,
+				Text:   "⛔ 你没有权限执行删除操作喵~",
+			})
+			return
+		}
 
-    targetID := strings.TrimSpace(parts[1])
+		text := update.Message.Text
+		parts := strings.Fields(text)
+		if len(parts) < 2 {
+			b.SendMessage(bgCtx, &bot.SendMessageParams{
+				ChatID: update.Message.Chat.ID,
+				Text:   "⚠️ 格式不对喵🐱！~请输入：/delete <ID>\n例如：/delete pixiv_114514_p0。再输错，小心本喵帮你格式化🐱嗷~",
+			})
+			return
+		}
 
-    // 调用数据库删除
-    err := h.DB.DeleteImage(targetID)
-    if err != nil {
-        log.Printf("❌ Delete Failed: %v", err)
-        b.SendMessage(bgCtx, &bot.SendMessageParams{
-            ChatID: update.Message.Chat.ID,
-            Text:   fmt.Sprintf("🐱不好了喵~❌ 删除失败: %v", err),
-        })
-        return
-    }
+		targetID := strings.TrimSpace(parts[1])
 
-    log.Printf("🗑️ Image deleted: %s", targetID)
-    b.SendMessage(bgCtx, &bot.SendMessageParams{
-        ChatID: update.Message.Chat.ID,
-        Text:   fmt.Sprintf("🗑️🐱Yuki猫猫已经帮主人清理干净了喵~!🐱图片 `%s` 已从数据库移除。", targetID),
-        //ParseMode: models.ParseModeMarkdown,
-    })
- }()
+		err := h.DB.DeleteImage(targetID)
+		if err != nil {
+			log.Printf("❌ Delete Failed: %v", err)
+			b.SendMessage(bgCtx, &bot.SendMessageParams{
+				ChatID: update.Message.Chat.ID,
+				Text:   fmt.Sprintf("🐱不好了喵~❌ 删除失败: %v", err),
+			})
+			return
+		}
+
+		log.Printf("🗑️ Image deleted: %s", targetID)
+		b.SendMessage(bgCtx, &bot.SendMessageParams{
+			ChatID:    update.Message.Chat.ID,
+			Text:      fmt.Sprintf("🗑️🐱Yuki猫猫已经帮主人清理干净了喵~!🐱图片 `%s` 已从数据库移除。", targetID),
+			ParseMode: models.ParseModeMarkdown,
+		})
+	}()
 }
-
-
-
-
-
 
 //func (h *BotHandler) handleFanboxLink(ctx context.Context, b *bot.Bot, update *models.Update) {
 //    if h.Forwarding {
@@ -917,6 +581,3 @@ func (h *BotHandler) handleDelete(ctx context.Context, b *bot.Bot, update *model
 //        ChatID: update.Message.Chat.ID,
 //        Text:   fmt.Sprintf("✅ Fanbox 处理完成！发送 %d 张", successCount),
 //    })
-//}
-
-
