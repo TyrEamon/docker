@@ -783,7 +783,7 @@ func (h *BotHandler) handleDelete(ctx context.Context, b *bot.Bot, update *model
     b.SendMessage(bgCtx, &bot.SendMessageParams{
         ChatID: update.Message.Chat.ID,
         Text:   fmt.Sprintf("🗑️🐱Yuki猫猫已经帮主人清理干净了喵~!🐱图片 `%s` 已从数据库移除。", targetID),
-        ParseMode: models.ParseModeMarkdown,
+        //ParseMode: models.ParseModeMarkdown,
     })
  }()
 }
