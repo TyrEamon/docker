@@ -52,6 +52,9 @@ func NewBot(cfg *config.Config, db *database.D1Client) (*BotHandler, error) {
 	// /save
 	b.RegisterHandler(bot.HandlerTypeMessageText, "/save", bot.MatchTypeExact, h.handleSave)
 
+	// 增加 delete 指令，前缀匹配，后面要跟 ID
+    b.RegisterHandler(bot.HandlerTypeMessageText, "/delete", bot.MatchTypePrefix, h.handleDelete)
+
 	// Pixiv Link
 	b.RegisterHandler(bot.HandlerTypeMessageText, "pixiv.net/artworks/", bot.MatchTypeContains, h.handlePixivLink)
 
@@ -710,6 +713,54 @@ func (h *BotHandler) handleYandeLink(ctx context.Context, b *bot.Bot, update *mo
         ReplyParameters: &models.ReplyParameters{MessageID: update.Message.ID},
     })
 }
+
+func (h *BotHandler) handleDelete(ctx context.Context, b *bot.Bot, update *models.Update) {
+    userID := update.Message.From.ID
+    // 鉴权
+    if userID != 8040798522 && userID != 6874581126 { 
+        b.SendMessage(ctx, &bot.SendMessageParams{
+            ChatID: update.Message.Chat.ID,
+            Text:   "⛔ 你没有权限执行删除操作喵~",
+        })
+        return
+    }
+
+    text := update.Message.Text
+    // 解析 ID，格式：/delete pixiv_123456_p0
+    parts := strings.Fields(text)
+    if len(parts) < 2 {
+        b.SendMessage(ctx, &bot.SendMessageParams{
+            ChatID: update.Message.Chat.ID,
+            Text:   "⚠️ 格式不对喵🐱！~请输入：/delete <ID>\n例如：/delete pixiv_114514_p0。再输错，小心本喵帮你格式化🐱嗷~",
+        })
+        return
+    }
+
+    targetID := strings.TrimSpace(parts[1])
+
+    // 调用数据库删除
+    err := h.DB.DeleteImage(targetID)
+    if err != nil {
+        log.Printf("❌ Delete Failed: %v", err)
+        b.SendMessage(ctx, &bot.SendMessageParams{
+            ChatID: update.Message.Chat.ID,
+            Text:   fmt.Sprintf("🐱不好了喵~❌ 删除失败: %v", err),
+        })
+        return
+    }
+
+    log.Printf("🗑️ Image deleted: %s", targetID)
+    b.SendMessage(ctx, &bot.SendMessageParams{
+        ChatID: update.Message.Chat.ID,
+        Text:   fmt.Sprintf("🗑️🐱Yuki猫猫已经帮主人清理干净了喵~!🐱图片 `%s` 已从数据库移除。", targetID),
+        ParseMode: models.ParseModeMarkdown,
+    })
+}
+
+
+
+
+
 
 //func (h *BotHandler) handleFanboxLink(ctx context.Context, b *bot.Bot, update *models.Update) {
 //    if h.Forwarding {
