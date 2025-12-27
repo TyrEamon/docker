@@ -13,6 +13,7 @@ import (
 	"regexp"
 	"strings"
 	"time"
+	"sync"
 
 	"my-bot-go/internal/config"
 	"my-bot-go/internal/database"
@@ -30,6 +31,7 @@ type BotHandler struct {
 	API             *bot.Bot
 	Cfg             *config.Config
 	DB              *database.D1Client
+	mu              sync.RWMutex   // 🔴 新增互斥锁
 	Forwarding      bool
 	ForwardBaseID   string          	
 	ForwardIndex    int             
@@ -82,9 +84,21 @@ func NewBot(cfg *config.Config, db *database.D1Client) (*BotHandler, error) {
 			return 
 		}
 		
-        //转发模式，拦截图片
-		if h.Forwarding {
-			msg := update.Message
+         // 🔴 加读锁检查状态
+        h.mu.RLock()
+        isForwarding := h.Forwarding
+        h.mu.RUnlock()
+
+        // 转发模式，拦截图片
+        if isForwarding {
+            go func() {
+                h.mu.Lock()
+                defer h.mu.Unlock()
+                
+                if !h.Forwarding { return }
+
+                msg := update.Message
+                bgCtx := context.Background() // 使用 Background Context
 			
 			// 处理图片 (Preview)
 			if len(msg.Photo) > 0 {
@@ -93,7 +107,7 @@ func NewBot(cfg *config.Config, db *database.D1Client) (*BotHandler, error) {
 				h.CurrentOriginal = nil 
 				
 				log.Printf("🖼 [Forward] 收到 P%d 预览图", h.ForwardIndex)
-				b.SendMessage(ctx, &bot.SendMessageParams{
+				b.SendMessage(bgCtx, &bot.SendMessageParams{
 					ChatID:          msg.Chat.ID,
 					Text:            fmt.Sprintf("✅ yukiyuki获取到 P%d 预览图啦，主人请发送原图文件(Document)吧，喵~🐱", h.ForwardIndex),
 					ReplyParameters: &models.ReplyParameters{MessageID: msg.ID},
@@ -112,7 +126,7 @@ func NewBot(cfg *config.Config, db *database.D1Client) (*BotHandler, error) {
 				}
 				
 				log.Printf("📄 [Forward] 收到 P%d 原图", h.ForwardIndex)
-				b.SendMessage(ctx, &bot.SendMessageParams{
+				b.SendMessage(bgCtx, &bot.SendMessageParams{
 					ChatID:          msg.Chat.ID,
 					Text:            fmt.Sprintf("✅ P%d 就绪了喵~🐱。\n请输入 /forward_continue 发布并继续下一张\n或 /forward_end 发布并结束（^v^）。", h.ForwardIndex),
 					ReplyParameters: &models.ReplyParameters{MessageID: msg.ID},
@@ -273,8 +287,11 @@ func (h *BotHandler) handleManual(ctx context.Context, b *bot.Bot, update *model
 
 
 func (h *BotHandler) handleForwardStart(ctx context.Context, b *bot.Bot, update *models.Update) {
-	msg := update.Message
-	userID := msg.From.ID
+	// 🔴 启动异步
+    go func() {
+        bgCtx := context.Background()
+	    msg := update.Message
+	    userID := msg.From.ID
 	if userID != 8040798522 && userID != 6874581126 { 
 		return
 	}
@@ -292,6 +309,7 @@ func (h *BotHandler) handleForwardStart(ctx context.Context, b *bot.Bot, update 
 	}
 
 	// 初始化状态
+	h.mu.Lock()
 	h.Forwarding = true
 	h.ForwardBaseID = fmt.Sprintf("manual_%d", msg.ID)
 	h.ForwardIndex = 0
@@ -299,11 +317,12 @@ func (h *BotHandler) handleForwardStart(ctx context.Context, b *bot.Bot, update 
 	h.ForwardTags = tags
 	h.CurrentPreview = nil
 	h.CurrentOriginal = nil
+	h.mu.Unlock()
 
 	info := fmt.Sprintf("✅ **转发模式已启动**\n🆔 BaseID: `%s`\n📝 标题: %s\n🏷 标签: %s\n\n🐱 请发送 **首张预览图**吧,喵~(^v^)", 
 		h.ForwardBaseID, title, tags)
 
-	b.SendMessage(ctx, &bot.SendMessageParams{
+	b.SendMessage(bgCtx, &bot.SendMessageParams{
 		ChatID:    msg.Chat.ID,
 		Text:      info,
 		///ParseMode: models.ParseModeMarkdown,
@@ -311,37 +330,47 @@ func (h *BotHandler) handleForwardStart(ctx context.Context, b *bot.Bot, update 
 }
 
 func (h *BotHandler) publishCurrentItem(ctx context.Context, b *bot.Bot, chatID int64) bool {
+	// 🔴 1. 快速读取所有需要的状态，然后立马解锁
+    h.mu.RLock()
+	preview := h.CurrentPreview
+    original := h.CurrentOriginal
+    baseID := h.ForwardBaseID
+    index := h.ForwardIndex
+    title := h.ForwardTitle
+    tags := h.ForwardTags
+    h.mu.RUnlock()
+	
 	if h.CurrentPreview == nil {
 		b.SendMessage(ctx, &bot.SendMessageParams{ChatID: chatID, Text: "⚠️ 嗷，出错啦：当前没有等待发布的图片哦，没办法继续了喵~。"})
 		return false
 	}
 
-	postID := fmt.Sprintf("%s_p%d", h.ForwardBaseID, h.ForwardIndex)
+	postID := fmt.Sprintf("%s_p%d", baseID, index)
 	
 	// 构造标题
-	caption := h.ForwardTitle
+	caption := title
 	if caption == "" { caption = "MtcACG:TG" }
-	caption = fmt.Sprintf("%s [P%d]", caption, h.ForwardIndex)
-	if h.ForwardTags != "" {
-		caption = caption + "\n" + h.ForwardTags
+	caption = fmt.Sprintf("%s [P%d]", caption, index)
+	if tags != "" {
+		caption = caption + "\n" + tags
 	}
 
-	dbTags := h.ForwardTags
+	dbTags := tags
 	if dbTags == "" { dbTags = "TG-Forward" }
 
 	var previewFileID, originFileID string
 	var width, height int
 
 	// 发送预览图到频道
-	if len(h.CurrentPreview.Photo) > 0 {
-		srcPhoto := h.CurrentPreview.Photo[len(h.CurrentPreview.Photo)-1]
+	if len(preview.Photo) > 0 {
+		srcPhoto := preview.Photo[len(preview.Photo)-1]
 		fwdMsg, err := b.SendPhoto(ctx, &bot.SendPhotoParams{
 			ChatID:  h.Cfg.ChannelID,
 			Photo:   &models.InputFileString{Data: srcPhoto.FileID},
 			Caption: caption,
 		})
 		if err != nil {
-			log.Printf("❌ P%d Preview Send Failed: %v", h.ForwardIndex, err)
+			log.Printf("❌ P%d Preview Send Failed: %v", index, err)
 			return false
 		}
 		previewFileID = fwdMsg.Photo[len(fwdMsg.Photo)-1].FileID
@@ -349,17 +378,17 @@ func (h *BotHandler) publishCurrentItem(ctx context.Context, b *bot.Bot, chatID 
 		height = srcPhoto.Height
 		
 		if h.CurrentOriginal != nil && h.CurrentOriginal.Document != nil {
-			originFileID = h.CurrentOriginal.Document.FileID
+			originFileID = original.Document.FileID
 		}
-	} else if h.CurrentPreview.Document != nil {
-		srcDoc := h.CurrentPreview.Document
+	} else if preview.Document != nil {
+		srcDoc := preview.Document
 		fwdMsg, err := b.SendDocument(ctx, &bot.SendDocumentParams{
 			ChatID:   h.Cfg.ChannelID,
 			Document: &models.InputFileString{Data: srcDoc.FileID},
 			Caption:  caption,
 		})
 		if err != nil {
-			log.Printf("❌ P%d Doc Send Failed: %v", h.ForwardIndex, err)
+			log.Printf("❌ P%d Doc Send Failed: %v", index, err)
 			return false
 		}
 		previewFileID = fwdMsg.Document.FileID
@@ -375,7 +404,7 @@ func (h *BotHandler) publishCurrentItem(ctx context.Context, b *bot.Bot, chatID 
 		docMsg, err := b.SendDocument(ctx, &bot.SendDocumentParams{
 			ChatID:   h.Cfg.ChannelID,
 			Document: &models.InputFileString{Data: originFileID},
-			Caption:  fmt.Sprintf("⬇️ %s P%d Original", h.ForwardTitle, h.ForwardIndex),
+			Caption:  fmt.Sprintf("⬇️ %s P%d Original", title, index),
 		})
 		if err == nil {
 			originFileID = docMsg.Document.FileID
@@ -385,7 +414,7 @@ func (h *BotHandler) publishCurrentItem(ctx context.Context, b *bot.Bot, chatID 
 	// 存入数据库
 	err := h.DB.SaveImage(postID, previewFileID, originFileID, caption, dbTags, "TG-Forward", width, height)
 	if err != nil {
-		log.Printf("❌ P%d DB Save Failed: %v", h.ForwardIndex, err)
+		log.Printf("❌ P%d DB Save Failed: %v", index, err)
 		b.SendMessage(ctx, &bot.SendMessageParams{ChatID: chatID, Text: "❌ 糟了！数据库保存失败，流程暂停。喵呜(^x_x^)"})
 		return false
 	}
@@ -396,46 +425,68 @@ func (h *BotHandler) publishCurrentItem(ctx context.Context, b *bot.Bot, chatID 
 
 // 3. 继续下一张
 func (h *BotHandler) handleForwardContinue(ctx context.Context, b *bot.Bot, update *models.Update) {
-	if !h.Forwarding { return }
+	go func() {
+        bgCtx := context.Background()
+	h.mu.RLock()
+	if !h.Forwarding {
+		h.mu.RUnlock()
+		return 
+	}
+	h.mu.RUnlock()
 	chatID := update.Message.Chat.ID
 
 	// 尝试发布当前缓存的图片
-	success := h.publishCurrentItem(ctx, b, chatID)
+	success := h.publishCurrentItem(bgCtx, b, chatID)
 	if !success {
 		return
 	}
 
 	// 更新索引，清空缓存
+	h.mu.Lock()
 	prevIndex := h.ForwardIndex
 	h.ForwardIndex++
 	h.CurrentPreview = nil
 	h.CurrentOriginal = nil
+	h.mu.Unlock()
 
-	b.SendMessage(ctx, &bot.SendMessageParams{
+	b.SendMessage(bgCtx, &bot.SendMessageParams{
 		ChatID: chatID,
 		Text:   fmt.Sprintf("✅ **P%d 已发布** (ID: `%s_p%d`)\n⬇️ 正在等待 **P%d** ...", prevIndex, h.ForwardBaseID, prevIndex, h.ForwardIndex),
 		//ParseMode: models.ParseModeMarkdown,
 	})
+ }()
 }
 
 // 4. 结束会话
 func (h *BotHandler) handleForwardEnd(ctx context.Context, b *bot.Bot, update *models.Update) {
-	if !h.Forwarding { return }
+	go func() {
+        bgCtx := context.Background()
+	h.mu.RLock()
+	if !h.Forwarding {
+		h.mu.RUnlock()
+		return 
+	}
+	h.mu.RUnlock()
+		
 	chatID := update.Message.Chat.ID
 
 	// 检查是否还有最后一张未发布
 	if h.CurrentPreview != nil {
-		success := h.publishCurrentItem(ctx, b, chatID)
+		success := h.publishCurrentItem(bgCtx, b, chatID)
 		if success {
-			b.SendMessage(ctx, &bot.SendMessageParams{
+			h.mu.RLock()
+			idx := h.ForwardIndex
+			h.mu.RUnlock()
+			b.SendMessage(bgCtx, &bot.SendMessageParams{
 				ChatID: chatID,
-				Text:   fmt.Sprintf("✅ **P%d (尾图) 已发布**", h.ForwardIndex),
+				Text:   fmt.Sprintf("✅ **P%d (尾图) 已发布**", idx),
 				//ParseMode: models.ParseModeMarkdown,
 			})
 		}
 	}
 
 	// 清理状态
+	h.mu.Lock()
 	h.Forwarding = false
 	h.ForwardBaseID = ""
 	h.ForwardIndex = 0
@@ -443,8 +494,9 @@ func (h *BotHandler) handleForwardEnd(ctx context.Context, b *bot.Bot, update *m
 	h.CurrentOriginal = nil
 	h.ForwardTitle = ""
 	h.ForwardTags = ""
+	h.mu.Unlock()
 
-	b.SendMessage(ctx, &bot.SendMessageParams{
+	b.SendMessage(bgCtx, &bot.SendMessageParams{
 		ChatID: chatID,
 		Text:   "🏁 🐱好耶（^-^）**任务完成喵~** 🐱",
 		ParseMode: models.ParseModeMarkdown,
