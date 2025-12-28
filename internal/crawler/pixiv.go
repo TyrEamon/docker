@@ -164,7 +164,7 @@ func StartPixiv(ctx context.Context, cfg *config.Config, db *database.D1Client, 
 							detail.Body.UserName, 
 							strings.ReplaceAll(tagsStr, " ", " #"))
 
-						botHandler.ProcessAndSend(ctx, imgResp.Body(), subPid, tagsStr, caption, "pixiv", page.Width, page.Height)
+						botHandler.ProcessAndSend(ctx, imgResp.Body(), subPid, tagsStr, caption, detail.Body.UserName, "pixiv", page.Width, page.Height)
 						
 						time.Sleep(18 * time.Second) // 防被ban
 					}
