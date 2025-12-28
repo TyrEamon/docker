@@ -84,7 +84,7 @@ func (d *D1Client) SaveImage(postID, fileID, originID, caption, artist, tags, so
 	
 	finalTags := fmt.Sprintf("%s %s", tags, source)
 	
-	sql := "INSERT OR IGNORE INTO images (id, file_name, origin_id, caption, artist, tags, created_at, width, height) VALUES (?, ?, ?, ?, ?, ?, ?, ?，?)"
+	sql := "INSERT OR IGNORE INTO images (id, file_name, origin_id, caption, artist, tags, created_at, width, height) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
 	params := []interface{}{postID, fileID, originID, caption, artist, finalTags, time.Now().Unix(), width, height}
 	
 	body := map[string]interface{}{
