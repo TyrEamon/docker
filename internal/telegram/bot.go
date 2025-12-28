@@ -295,6 +295,7 @@ func (h *BotHandler) handleForwardStart(ctx context.Context, b *bot.Bot, update 
 		userID := msg.From.ID
 		if userID != 8040798522 && userID != 6874581126 {
 			return
+	}
 		
 	// 新解析逻辑：标题 艺术家 #标签
     rawText := ""
