@@ -138,7 +138,7 @@ func StartManyACG(ctx context.Context, cfg *config.Config, db *database.D1Client
                             hashTags,
                         )
 
-                        botHandler.ProcessAndSend(ctx, imgData, pid, tagsStr, caption, "mtcacg", width, height)
+                        botHandler.ProcessAndSend(ctx, imgData, pid, tagsStr, caption, item.Artist.Name, "mtcacg", width, height)
                         db.History[pid] = true
                         db.PushHistory()
 
