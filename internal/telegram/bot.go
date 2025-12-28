@@ -459,7 +459,6 @@ func (h *BotHandler) handleForwardContinue(ctx context.Context, b *bot.Bot, upda
 			h.mu.RUnlock()
 			return
 		}
-		artist := h.ForwardArtist
 		h.mu.RUnlock()
 		chatID := update.Message.Chat.ID
 
@@ -682,7 +681,7 @@ func (h *BotHandler) handleManyacgLink(ctx context.Context, b *bot.Bot, update *
 				continue
 			}
 
-			h.ProcessAndSend(bgCtx, imgData, pid, manyacg.FormatTags(artwork.Tags), caption, artwork.Artist, "manyacg", pic.Width, pic.Height)
+			h.ProcessAndSend(bgCtx, imgData, pid, manyacg.FormatTags(artwork.Tags), caption, artwork.Artist.Name, "manyacg", pic.Width, pic.Height)
 			successCount++
 			time.Sleep(1 * time.Second)
 		}
