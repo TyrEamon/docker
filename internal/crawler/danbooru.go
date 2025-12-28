@@ -126,6 +126,7 @@ func StartDanbooru(ctx context.Context, cfg *config.Config, db *database.D1Clien
 					pid,
 					tagsStr,
 					caption,
+					"",
 					"danbooru",
 					post.ImageWidth,
 					post.ImageHeight,
