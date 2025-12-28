@@ -716,7 +716,34 @@ export function htmlDetail(params) {
     .rec-item img { width: 100%; height: 100%; object-fit: cover; transition: .3s; }
     .rec-item:hover img { opacity: 0.8; transform: scale(1.05); }
 
-    #lightbox { position: fixed; inset: 0; background: rgba(0,0,0,0.9); display: none; align-items: center; justify-content: center; z-index: 100; }
+    #lightbox { position: fixed; inset: 0; background: rgba(0,0,0,0.9); display: none; align-items: center; justify-content: center; z-index: 100; 
+    
+    /* 🔥 新增：画家卡片样式 */
+  .artist-card {
+    margin-bottom: 1rem;
+    padding: 0.75rem 1rem;
+    border-radius: 12px;
+    transition: all 0.3s ease;
+    cursor: pointer;
+  }
+
+  .artist-card:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 8px 25px rgba(236, 72, 153, 0.3);
+  }
+
+  .artist-card a {
+    text-decoration: none;
+  }
+
+  .artist-card svg {
+    transition: all 0.2s ease;
+  }
+
+  .artist-card:hover svg {
+    opacity: 1;
+    transform: scale(1.1);
+    }
   </style>
 </head>
 <body>
@@ -750,6 +777,17 @@ export function htmlDetail(params) {
 
       <div class="right-col">
         <div class="info-box">
+<div class="artist-card mb-4 p-3 bg-gradient-to-r from-pink-500/20 to-purple-500/20 border border-white/20 rounded-xl backdrop-blur-sm">
+        ${artist ? 
+          `<a href="/?q=${encodeURIComponent(artist)}" class="inline-flex items-center gap-2 text-lg font-semibold text-white hover:text-pink-300 transition">
+              👤 ${artist}
+              <svg class="w-4 h-4 opacity-80" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"></path>
+              </svg>
+          </a>` : 
+          '<span class="text-gray-400 text-sm flex items-center gap-2">👤 匿名画师</span>'
+        }
+      </div>
           <h1 id="title-text"></h1>
           <div id="id-text" class="id-row"></div>
           <div id="tags-box" class="tags">${tags.map(t => `<a href="/?q=${encodeURIComponent(t)}" class="tag">#${t}</a>`).join('')}</div>
