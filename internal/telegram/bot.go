@@ -168,7 +168,7 @@ func (h *BotHandler) downloadFile(ctx context.Context, fileID string) ([]byte, e
 	return io.ReadAll(resp.Body)
 }
 
-func (h *BotHandler) ProcessAndSend(ctx context.Context, imgData []byte, postID, tags, caption, source string, width, height int) {
+func (h *BotHandler) ProcessAndSend(ctx context.Context, imgData []byte, postID, tags, caption, artist, source string, width, height int) {
 	if h.DB.History[postID] {
 		log.Printf("⏭️ Skip %s: already in history", postID)
 		return
@@ -225,7 +225,7 @@ func (h *BotHandler) ProcessAndSend(ctx context.Context, imgData []byte, postID,
 		originFileID = msgDoc.Document.FileID
 	}
 
-	err = h.DB.SaveImage(postID, fileID, originFileID, caption, tags, source, width, height)
+	err = h.DB.SaveImage(postID, fileID, originFileID, caption, artist, tags, source, width, height)
 	if err != nil {
 		log.Printf("❌ D1 Save Failed: %v", err)
 	} else {
@@ -279,7 +279,7 @@ func (h *BotHandler) handleManual(ctx context.Context, b *bot.Bot, update *model
 	finalFileID := msg.Photo[len(msg.Photo)-1].FileID
 	width := photo.Width
 	height := photo.Height
-	h.DB.SaveImage(postID, finalFileID, "", caption, "TG-forward", "TG-C", width, height)
+	h.DB.SaveImage(postID, finalFileID, "", caption, "Forward", "TG-forward", "TG-C", width, height)
 	b.SendMessage(ctx, &bot.SendMessageParams{
 		ChatID:          update.Message.Chat.ID,
 		Text:            "✅ handleManual Saved to D1!",
