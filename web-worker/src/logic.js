@@ -63,7 +63,7 @@ export async function proxyTelegramImage(fileId, botToken, dlExt = null) {
 
 // === 3. 详情页处理函数 ===
 export async function handleDetail(id, env) {
-   const img = await env.DB.prepare("SELECT id, file_name, origin_id, caption, artist, tags, created_at, width, height, source FROM images WHERE id = ?").bind(id).first();
+   const img = await env.DB.prepare("SELECT id, file_name, origin_id, caption, artist, tags, created_at, width, height, artist FROM images WHERE id = ?").bind(id).first();
    if (!img) return new Response("404", { status: 404 });
 
    let parentId = img.id;
