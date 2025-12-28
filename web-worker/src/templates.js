@@ -314,17 +314,17 @@ export function htmlHome() {
         let colHeights = new Array(colCount).fill(0);
         
     const blockKeywords =[
-        'R-18','NSFW','Hentai','血腥','R18','性爱','性交','淫','乱伦','裸胸',
-        '露点','调教','捆绑','触手','高潮','喷水','阿黑颜','颜射','后宫','痴汉','NTR','3P','Boobs','Tits',
-        'Nipples','Breast','强暴','做爱','自慰','援交','喷水','Creampie','Cum','Bukkake','Sex','Fuck',
+        'R-18','NSFW','Hentai','血腥','R18','性爱','性交','淫','乱伦','调教','捆绑',
+        '触手','高潮','喷水','阿黑颜','颜射','后宫','痴汉','NTR','Boobs',
+        'Nipples','强暴','做爱','自慰','援交','喷水','Creampie','Bukkake','Fuck',
         'Blowjob','口交','Handjob','Paizuri','乳交','Cunnilingus','Fellatio','Masturbation','Pussy',
-        'Vagina','Penis','Dick','Cock','Genitals','Pubic','阴部','阴茎','私处','白虎','爆乳','Breast',
-        'Nude','Topless','Ahegao','高潮脸','X-ray','断面图','Mind Break','恶堕','坏掉','透视','Futa','扶她',
-        '双性','Tentacle','BDSM','Bondage','束缚','Scat','Pregnant','妊娠','怀孕','异种','丸吞','破れタイツ',
-        '敗北','快楽堕ち','寝取られ','乳出し','Garter','Lingerie','Panty','Stockings','ふたなり','輪姦','母子',
-        '近親','異種姦','孕ませ','緊縛','奴隷','悪堕ち','精神崩壊','セックス','中出し','顔射','イラマチオ','フェラ',
-        'パイズリ','手コキ','潮吹き','絶頂','アヘ顔','全裸','乳首','ペニス','ヴァギナ','クリトリス','近親','触手',
-        'レイプ','調教','スカトロ','ふたなり','パンツ下ろし','naked','nipples','anus',];
+        'Vagina','Genitals','阴部','阴茎','私处','爆乳','Nude','Topless','Ahegao','高潮脸',
+        'X-ray','断面图','Mind Break','恶堕','坏掉','透视','Futa','扶她','双性','Tentacle','BDSM','Bondage',
+        '束缚','Scat','Pregnant','妊娠','怀孕','丸吞','破れタイツ','快楽堕ち','寝取られ','乳出し',
+        'Garter','Lingerie','Panty','Stockings','ふたなり','輪姦','近親','異種姦','孕ませ','緊縛','奴隷',
+        '悪堕ち','精神崩壊','セックス','中出し','顔射','イラマチオ','フェラ','パイズリ','手コキ','潮吹き','絶頂',
+        'アヘ顔','全裸','乳首','ペニス','ヴァギナ','クリトリス','近親','触手','レイプ','調教','スカトロ','ふたなり',
+        'パンツ下ろし','naked','nipples','anus',];
 
     const r18Keywords = [
         'R-18','NSFW','Hentai','血腥','R18','性爱','性交','淫','乱伦','裸胸','露点','调教',
@@ -577,7 +577,7 @@ export function htmlHome() {
 
 export function htmlDetail(params) {
   // 解包参数，方便下面使用
-  const { title, bgUrl, imagesJson, currentIndex, tags, randomPosts } = params;
+  const { title, artist, bgUrl, imagesJson, currentIndex, tags, randomPosts } = params;
 
   // 这里的 SIDEBAR_CONTENT 是你详情页专用的侧边
   const SIDEBAR_CONTENT = `
@@ -693,7 +693,7 @@ export function htmlDetail(params) {
     .viewer img { 
       max-width: 100%; max-height: 100%; 
       object-fit: contain; border-radius: 12px; 
-      box-shadow: 0 10px 40px rgba(0,0,0,0.5); 
+      box-shadow: 0 10px 40px rgba(0,0,0,0.5);
     }
     @media(max-width: 1023px) { .viewer img { max-height: 60vh; } }
 
@@ -716,34 +716,7 @@ export function htmlDetail(params) {
     .rec-item img { width: 100%; height: 100%; object-fit: cover; transition: .3s; }
     .rec-item:hover img { opacity: 0.8; transform: scale(1.05); }
 
-    #lightbox { position: fixed; inset: 0; background: rgba(0,0,0,0.9); display: none; align-items: center; justify-content: center; z-index: 100; 
-    
-    /* 🔥 新增：画家卡片样式 */
-  .artist-card {
-    margin-bottom: 1rem;
-    padding: 0.75rem 1rem;
-    border-radius: 12px;
-    transition: all 0.3s ease;
-    cursor: pointer;
-  }
-
-  .artist-card:hover {
-    transform: translateY(-1px);
-    box-shadow: 0 8px 25px rgba(236, 72, 153, 0.3);
-  }
-
-  .artist-card a {
-    text-decoration: none;
-  }
-
-  .artist-card svg {
-    transition: all 0.2s ease;
-  }
-
-  .artist-card:hover svg {
-    opacity: 1;
-    transform: scale(1.1);
-    }
+    #lightbox { position: fixed; inset: 0; background: rgba(0,0,0,0.9); display: none; align-items: center; justify-content: center; z-index: 100; }
   </style>
 </head>
 <body>
@@ -777,17 +750,21 @@ export function htmlDetail(params) {
 
       <div class="right-col">
         <div class="info-box">
-<div class="artist-card mb-4 p-3 bg-gradient-to-r from-pink-500/20 to-purple-500/20 border border-white/20 rounded-xl backdrop-blur-sm">
-        ${artist ? 
-          `<a href="/?q=${encodeURIComponent(artist)}" class="inline-flex items-center gap-2 text-lg font-semibold text-white hover:text-pink-300 transition">
-              👤 ${artist}
-              <svg class="w-4 h-4 opacity-80" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"></path>
-              </svg>
-          </a>` : 
-          '<span class="text-gray-400 text-sm flex items-center gap-2">👤 匿名画师</span>'
-        }
-      </div>
+
+        <div class="artist-card mb-4 p-3 bg-gradient-to-r from-pink-500/20 to-purple-500/20
+                    border border-white/20 rounded-xl backdrop-blur-sm">
+          ${
+            artist
+              ? `<a href="/?q=${encodeURIComponent(artist)}"
+                   class="inline-flex items-center gap-2 text-lg font-semibold text-white hover:text-pink-300 transition">
+                   Artist(画师)： ${artist} 
+                   <span class="opacity-70"> 🎨</span>
+                 </a>`
+              : `<span class="text-gray-400 text-sm">Artist(画师)： Unknown Artist </span>`
+          }
+        </div>
+
+  
           <h1 id="title-text"></h1>
           <div id="id-text" class="id-row"></div>
           <div id="tags-box" class="tags">${tags.map(t => `<a href="/?q=${encodeURIComponent(t)}" class="tag">#${t}</a>`).join('')}</div>
@@ -840,6 +817,7 @@ export function htmlDetail(params) {
     const images = JSON.parse(root.dataset.images);
     let idx = parseInt(root.dataset.index);
     const imgEl = document.getElementById('img');
+    
     const titleEl = document.getElementById('title-text');
     const idEl = document.getElementById('id-text');
     const dlLink = document.getElementById('dl-link');
@@ -885,6 +863,5 @@ export function htmlDetail(params) {
 </body>
 </html>`;
 }
-
 
 
