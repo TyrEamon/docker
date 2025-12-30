@@ -18,7 +18,15 @@ export const SIDEBAR_HTML = `
       <svg class="w-5 h-5 mr-3 text-gray-300" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M3 11.5L12 4l9 7.5M5 10.5V20h5v-5h4v5h5v-9.5"/></svg>
       <span>首页</span>
     </a>
-    
+
+    <!-- 画师名人堂 (Sidebar Item) -->
+    <a href="/artists" class="flex items-center p-3 text-gray-300 hover:bg-white/10 rounded-lg transition">
+      <svg class="w-5 h-5 mr-3 text-yellow-400" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
+      </svg>
+      <span class="bg-gradient-to-r from-yellow-200 to-yellow-500 bg-clip-text text-transparent font-bold">画师名人堂</span>
+    </a>
+
     <a href="javascript:void(0)" onclick="randomImage(); toggleSidebar();" class="flex items-center p-3 text-gray-300 hover:bg-white/10 rounded-lg transition">
       <svg class="w-5 h-5 mr-3 text-gray-300" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4 6h4l3 6 3-6h4M4 18h4l3-6 3 6h4"/></svg>
       <span>随机抽图看看0w0</span>
@@ -147,8 +155,16 @@ export function htmlHome() {
   ${SIDEBAR_HTML}
   
   <div class="header">
+    <div class="flex items-center">
     <div class="p-2 cursor-pointer" onclick="toggleSidebar()">
       <svg width="24" height="24" fill="none" stroke="white" stroke-width="2"><path d="M3 12h18M3 6h18M3 18h18"/></svg>
+    </div>
+        <!-- 画师名人堂 (Header Icon) -->
+    <a href="/artists" class="ml-2 p-2 text-gray-300 hover:text-yellow-400 transition" title="画师名人堂">
+      <svg width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"/>
+      </svg>
+    </a>
     </div>
     <div class="search-bar">
       <input type="text" id="search" placeholder="  要搜索什么吖...." onchange="doSearch(this.value)">
@@ -475,6 +491,13 @@ export function htmlHome() {
            <button onclick="toggleSidebar()" class="text-gray-300 hover:text-white transition p-1">
              <svg width="24" height="24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12h18M3 6h18M3 18h18"/></svg>
            </button>
+               <!-- 画师名人堂 (Header Icon) -->
+         <a href="/artists" class="ml-2 p-2 text-gray-300 hover:text-yellow-400 transition" title="画师名人堂">
+           <svg width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+             <path stroke-linecap="round" stroke-linejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"/>
+           </svg>
+         </a>
+
            <h1 class="text-2xl font-bold bg-gradient-to-r from-pink-500 to-purple-500 bg-clip-text text-transparent">关于 MtcACG</h1>
          </div>
          <a href="/" class="text-xs bg-white/10 hover:bg-white/20 px-3 py-1.5 rounded-full transition border border-white/5">回到首页</a>
@@ -592,6 +615,15 @@ export function htmlDetail(params) {
           <svg class="w-5 h-5 mr-3 text-gray-300" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M3 11.5L12 4l9 7.5M5 10.5V20h5v-5h4v5h5v-9.5"/></svg>
           <span>首页</span>
         </a>
+
+            <!-- 画师名人堂 (Sidebar Item) -->
+        <a href="/artists" class="flex items-center p-3 text-gray-300 hover:bg-white/10 rounded-lg transition">
+           <svg class="w-5 h-5 mr-3 text-yellow-400" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
+           </svg>
+          <span class="bg-gradient-to-r from-yellow-200 to-yellow-500 bg-clip-text text-transparent font-bold">画师名人堂</span>
+        </a>
+    
         <a href="javascript:void(0)" onclick="randomImage(); toggleSidebar();" class="flex items-center p-3 text-gray-300 hover:bg-white/10 rounded-lg transition">
           <svg class="w-5 h-5 mr-3 text-gray-300" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4 6h4l3 6 3-6h4M4 18h4l3-6 3 6h4"/></svg>
           <span>随机抽图看看0w0</span>
@@ -755,7 +787,7 @@ export function htmlDetail(params) {
                     border border-white/20 rounded-xl backdrop-blur-sm">
           ${
             artist
-              ? `<a href="/?q=${encodeURIComponent(artist)}"
+              ? `<a href="/artist/${encodeURIComponent(artist)}"
                    class="inline-flex items-center gap-2 text-lg font-semibold text-white hover:text-pink-300 transition">
                    Artist(画师)： ${artist} 
                    <span class="opacity-70"> 🎨</span>
@@ -863,5 +895,684 @@ export function htmlDetail(params) {
 </body>
 </html>`;
 }
+
+
+
+// ==========================================
+// 2. 画师分类页 HTML (新增/替换此函数)
+// ==========================================
+export function htmlArtists() {
+  return `<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>画师名人堂 - MtcACG</title>
+  <link rel="icon" type="image/png" href="https://pub-d07d03b8c35d40309ce9c6d8216e885b.r2.dev/ACGg.png">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    ::-webkit-scrollbar { width: 0px; background: transparent; }
+    html { -ms-overflow-style: none; scrollbar-width: none; }
+    body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #121212; color: #fff; overflow-x: hidden; }
+    
+    #bg-layer { position: fixed; inset: 0; z-index: -1; background-size: cover; background-position: center; filter: blur(10px) brightness(0.5); opacity: 0; transition: opacity 1s; pointer-events: none; }
+
+    /* === 顶部栏 (更通透) === */
+    .header { 
+      position: fixed; top: 0; left: 0; right: 0; z-index: 50; 
+      /* 背景透明度降低到 0.6，模糊度增加 */
+      background: rgba(10, 10, 10, 0.6); 
+      backdrop-filter: blur(20px); 
+      border-bottom: 1px solid rgba(255,255,255,0.08); 
+      padding: 12px 20px; 
+      display: flex; align-items: center; justify-content: space-between; 
+    }
+    .logo { font-weight: 800; font-size: 18px; color: #fff; text-decoration: none; white-space: nowrap; }
+
+    /* 搜索框容器 */
+    .search-container {
+      position: relative;
+      display: flex;
+      align-items: center;
+      margin-right: 12px;
+    }
+    .search-input {
+      width: 0;
+      padding: 0;
+      border: none;
+      background: transparent;
+      color: white;
+      outline: none;
+      transition: all 0.3s ease;
+      border-bottom: 1px solid transparent;
+      opacity: 0;
+      font-size: 14px;
+    }
+    .search-input.expanded {
+      width: 160px;
+      padding: 4px 8px;
+      border-bottom: 1px solid #ec4899;
+      opacity: 1;
+      margin-right: 8px;
+    }
+    /* 移动端搜索框稍微宽一点 */
+    @media(max-width: 640px) {
+        .search-input.expanded { width: 120px; }
+    }
+    
+    .search-btn {
+      background: none; border: none; color: #ccc; cursor: pointer; padding: 4px;
+      transition: color 0.2s;
+    }
+    .search-btn:hover { color: #fff; }
+
+    /* === 瀑布流容器 === */
+    .masonry-wrap { display: flex; gap: 16px; padding: 16px; align-items: flex-start; margin-top: 60px; }
+    @media(min-width: 768px) { .masonry-wrap { padding: 30px; gap: 24px; max-width: 1800px; margin: 80px auto 0; } }
+    .masonry-col { flex: 1; display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+    @media(min-width: 768px) { .masonry-col { gap: 24px; } }
+
+    /* === 卡片样式 === */
+    .artist-card {
+      background: #202020; border-radius: 12px; overflow: hidden; position: relative;
+      transition: transform 0.2s, box-shadow 0.2s; box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+      display: flex; flex-direction: column;
+    }
+    .artist-card:hover { transform: translateY(-4px); box-shadow: 0 12px 24px rgba(0,0,0,0.5); z-index: 10; background: #2a2a2a; }
+
+    .cover-area { position: relative; width: 100%; cursor: zoom-in; }
+    .placeholder { width: 100%; padding-bottom: calc(var(--h) / var(--w) * 100%); background: #1a1a1a; }
+    .card-img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; opacity: 0; transition: opacity 0.4s; }
+    .card-img.loaded { opacity: 1; }
+    
+    .zoom-hint {
+      position: absolute; top: 10px; right: 10px;
+      background: rgba(0,0,0,0.6); border-radius: 50%; width: 32px; height: 32px;
+      display: flex; align-items: center; justify-content: center; opacity: 0; transition: opacity 0.2s; pointer-events: none;
+    }
+    .cover-area:hover .zoom-hint { opacity: 1; }
+
+    .info-bar { padding: 12px 14px; background: #202020; display: flex; flex-direction: column; gap: 10px; border-top: 1px solid rgba(255,255,255,0.05); }
+    .info-top { display: flex; justify-content: space-between; align-items: center; }
+    .artist-name { font-weight: 700; font-size: 15px; color: #fff; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
+    .info-bottom { display: flex; justify-content: space-between; align-items: center; }
+    .count-badge { font-size: 12px; color: #888; background: #151515; padding: 4px 8px; border-radius: 6px; }
+
+    .view-btn {
+      background: #4CAF50; color: white; font-size: 12px; font-weight: 600; padding: 6px 14px; border-radius: 99px; text-decoration: none; transition: background 0.2s; display: flex; align-items: center; gap: 4px;
+    }
+    .view-btn:hover { background: #45a049; }
+    .view-btn:active { transform: scale(0.95); }
+
+    /* === Lightbox === */
+    #lightbox { position: fixed; inset: 0; z-index: 999; background: rgba(0,0,0,0.95); display: none; align-items: center; justify-content: center; opacity: 0; transition: opacity 0.25s; }
+    #lightbox.active { display: flex; opacity: 1; }
+    #lightbox img { max-width: 90vw; max-height: 90vh; border-radius: 4px; box-shadow: 0 0 30px rgba(0,0,0,0.5); object-fit: contain; transform: scale(0.95); transition: transform 0.3s; }
+    #lightbox.active img { transform: scale(1); }
+    .lb-close { position: absolute; top: 20px; right: 20px; color: #fff; font-size: 30px; cursor: pointer; opacity: 0.7; }
+    .lb-close:hover { opacity: 1; }
+
+    .loading-tip { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background: rgba(0,0,0,0.8); padding: 8px 20px; border-radius: 20px; font-size: 12px; opacity: 0; transition: opacity 0.2s; pointer-events: none; }
+  </style>
+</head>
+<body>
+  <div id="bg-layer"></div>
+  ${SIDEBAR_HTML}
+
+  <div class="header">
+    <!-- 左侧：侧边栏按钮 + 名人堂入口 (高亮) -->
+    <div class="flex items-center gap-2">
+        <div class="p-2 cursor-pointer hover:bg-white/10 rounded-full transition" onclick="toggleSidebar()">
+          <svg width="24" height="24" fill="none" stroke="white" stroke-width="2"><path d="M3 12h18M3 6h18M3 18h18"/></svg>
+        </div>
+        <!-- 当前就在名人堂，所以这里图标给个高亮色 -->
+        <a href="/artists" class="p-2 text-yellow-400 bg-white/10 rounded-full" title="画师名人堂">
+          <svg width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"/>
+          </svg>
+        </a>
+    </div>
+
+    <!-- 右侧：搜索 + LOGO -->
+    <div class="flex items-center">
+        <!-- 搜索框 -->
+        <div class="search-container">
+            <input type="text" id="artist-search" class="search-input" placeholder="搜索画师..." onkeydown="handleSearch(event)">
+            <button class="search-btn" onclick="toggleSearch()">
+                <svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+            </button>
+        </div>
+        <a href="/" class="logo">MtcACG</a>
+    </div>
+  </div>
+
+  <div id="masonry" class="masonry-wrap"></div>
+  
+  <div id="tip" class="loading-tip">加载中...</div>
+
+  <!-- Lightbox 结构 -->
+  <div id="lightbox" onclick="closeLightbox()">
+    <div class="lb-close">&times;</div>
+    <img id="lb-img" src="" alt="Preview">
+  </div>
+
+  <script>
+    const masonry = document.getElementById('masonry');
+    const bgLayer = document.getElementById('bg-layer');
+    const tip = document.getElementById('tip');
+    
+    let page = 1;
+    let isLoading = false;
+    let done = false;
+    // 默认展示全部，q 用来存搜索关键词
+    let currentQuery = ''; 
+    let colHeights = [];
+    let cols = [];
+    let colCount = window.innerWidth < 640 ? 2 : (window.innerWidth < 1024 ? 3 : (window.innerWidth < 1400 ? 4 : 5));
+
+    // 搜索框展开/收起逻辑
+    function toggleSearch() {
+        const input = document.getElementById('artist-search');
+        const isExpanded = input.classList.contains('expanded');
+        
+        if (isExpanded && input.value.trim() !== '') {
+            // 如果已经展开且有内容，点击放大镜就执行搜索
+            doArtistSearch(input.value);
+        } else {
+            // 否则切换展开状态
+            input.classList.toggle('expanded');
+            if (!isExpanded) input.focus();
+        }
+    }
+    
+    // 回车搜索
+    function handleSearch(e) {
+        if (e.key === 'Enter') {
+            doArtistSearch(e.target.value);
+        }
+    }
+
+    // 执行搜索
+    function doArtistSearch(val) {
+        currentQuery = val.trim();
+        page = 1;
+        done = false;
+        load(true); // reset = true
+    }
+
+    function initMasonry() {
+      masonry.innerHTML = '';
+      cols = [];
+      colHeights = new Array(colCount).fill(0);
+      for(let i=0; i<colCount; i++) {
+        const div = document.createElement('div');
+        div.className = 'masonry-col';
+        masonry.appendChild(div);
+        cols.push(div);
+      }
+    }
+
+    window.addEventListener('resize', () => {
+      const newCount = window.innerWidth < 640 ? 2 : (window.innerWidth < 1024 ? 3 : (window.innerWidth < 1400 ? 4 : 5));
+      if(newCount !== colCount) {
+        colCount = newCount;
+        page = 1; done = false; load(true);
+      }
+    });
+
+    // Lightbox
+    window.openLightbox = function(url) {
+      const lb = document.getElementById('lightbox');
+      const img = document.getElementById('lb-img');
+      img.src = url;
+      lb.style.display = 'flex';
+      void lb.offsetWidth; lb.classList.add('active');
+      document.body.style.overflow = 'hidden';
+    };
+
+    window.closeLightbox = function() {
+      const lb = document.getElementById('lightbox');
+      lb.classList.remove('active');
+      setTimeout(() => {
+        lb.style.display = 'none';
+        document.getElementById('lb-img').src = '';
+        document.body.style.overflow = 'auto';
+      }, 250);
+    };
+    
+    document.addEventListener('keydown', (e) => { if(e.key === 'Escape') closeLightbox(); });
+
+    async function load(reset = false) {
+      if (isLoading || (done && !reset)) return;
+      isLoading = true;
+      tip.style.opacity = '1';
+
+      if (reset) initMasonry();
+      if (cols.length === 0) initMasonry();
+
+      try {
+        // ✅ 这里的 API 请求加上了 q 参数，实现后端搜索
+        const url = \`/artists?format=json&page=\${page}&q=\${encodeURIComponent(currentQuery)}\`;
+        const res = await fetch(url);
+        const data = await res.json();
+
+        if (data.length === 0) {
+          done = true;
+          tip.textContent = '没有更多了';
+          setTimeout(() => tip.style.opacity = '0', 2000);
+          isLoading = false;
+          return;
+        }
+
+        // 只有在第一页且是【全量浏览】（没搜东西）时才换大背景，避免搜索时背景乱跳
+        if (page === 1 && currentQuery === '' && data.length > 0) {
+          bgLayer.style.backgroundImage = \`url(/image/\${data[0].cover})\`;
+          bgLayer.style.opacity = '1';
+        }
+
+        for (const item of data) {
+          const w = item.width || 3;
+          const h = item.height || 4;
+          const aspectRatio = h / w;
+          
+          let minIdx = 0;
+          for(let i=1; i<colCount; i++) {
+            if(colHeights[i] < colHeights[minIdx]) minIdx = i;
+          }
+
+          const card = document.createElement('div');
+          card.className = 'artist-card';
+          
+          const coverUrl = \`/image/\${item.cover}?dl=jpg\`;
+          const artistLink = \`/artist/\${encodeURIComponent(item.artist)}\`;
+
+          card.innerHTML = \`
+            <div class="cover-area" onclick="openLightbox('\${coverUrl}')">
+               <div class="placeholder" style="--w:\${w}; --h:\${h};"></div>
+               <img class="card-img" src="\${coverUrl}" loading="lazy" onload="this.classList.add('loaded')">
+               <div class="zoom-hint">
+                 <svg width="16" height="16" fill="white" viewBox="0 0 24 24"><path d="M12 2a10 10 0 100 20 10 10 0 000-20zm0 18a8 8 0 110-16 8 8 0 010 16zm-1-13h2v6h-2zm0 8h2v2h-2z" fill="none"/><path fill="currentColor" d="M21 21l-4.35-4.35a7.95 7.95 0 001.35-4.65C18 7.58 14.42 4 10 4S2 7.58 2 12s3.58 8 8 8c1.77 0 3.4-.55 4.65-1.35L19 23l2-2zM10 18c-3.31 0-6-2.69-6-6s2.69-6 6-6 6 2.69 6 6-2.69 6-6 6z"/></svg>
+               </div>
+            </div>
+            
+            <div class="info-bar">
+               <div class="info-top">
+                 <div class="artist-name" title="\${item.artist}">\${item.artist}</div>
+               </div>
+               <div class="info-bottom">
+                 <div class="count-badge">\${item.count} 作品</div>
+                 <a href="\${artistLink}" class="view-btn">
+                   查看作品 <span style="font-size:14px">→</span>
+                 </a>
+               </div>
+            </div>
+          \`;
+
+          cols[minIdx].appendChild(card);
+          colHeights[minIdx] += (aspectRatio + 0.3);
+        }
+
+        page++;
+      } catch (e) { console.error(e); }
+      
+      isLoading = false;
+      tip.style.opacity = '0';
+    }
+
+    window.addEventListener('scroll', () => {
+      if ((window.innerHeight + window.scrollY) >= document.body.offsetHeight - 1000) {
+        load();
+      }
+    });
+
+    load(true);
+  </script>
+</body>
+</html>`;
+}
+
+
+// templates.js
+
+// 确保在文件顶部或适当位置引入了 SIDEBAR_HTML
+// import { SIDEBAR_HTML } from './templates.js'; 
+
+export function htmlArtistProfile(data) {
+  const { artist, count, updateTime, cover1, cover2, platformText } = data;
+
+  // === 3. 动态生成平台标签的 HTML ===
+  // 我们在模板里直接处理，把 "Pixiv、Yande.re" 拆开变成漂亮的彩色徽章
+  const platforms = platformText.split('、');
+  
+  const renderBadge = (p) => {
+    let icon = '🎨'; let colorClass = 'bg-gray-500/20 text-gray-200 border-gray-500/30';
+    if (p.includes('Pixiv')) { icon = '🅿️'; colorClass = 'bg-[#0096fa]/20 text-[#0096fa] border-[#0096fa]/30'; }
+    else if (p.includes('Yande')) { icon = '🍒'; colorClass = 'bg-[#ff4d4d]/20 text-[#ff4d4d] border-[#ff4d4d]/30'; }
+    else if (p.includes('MtcACG')) { icon = '🌟'; colorClass = 'bg-[#a855f7]/20 text-[#a855f7] border-[#a855f7]/30'; }
+    else if (p.includes('Twitter')) { icon = '🐦'; colorClass = 'bg-[#1da1f2]/20 text-[#1da1f2] border-[#1da1f2]/30'; }
+    
+    return `<span class="platform-badge ${colorClass}">${icon} ${p}</span>`;
+  };
+
+  const badgesHtml = platforms.map(p => renderBadge(p.trim())).join('');
+
+
+  return `<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>${artist} - 作品集</title>
+  <link rel="icon" type="image/png" href="https://pub-d07d03b8c35d40309ce9c6d8216e885b.r2.dev/ACGg.png">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    /* === 基础设置 === */
+    body { background: #121212; color: #fff; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+    ::-webkit-scrollbar { width: 0; }
+    
+    /* === 优化点2：网页大背景 (调亮) === */
+    /* 之前的 brightness(0.4) 太黑了，改成 0.6，模糊度保留 */
+    .page-bg {
+      position: fixed; inset: 0; z-index: -2;
+      background-image: url('/image/${cover2}?dl=jpg');
+      background-size: cover; background-position: center;
+      filter: blur(3px) brightness(0.6); 
+      transform: scale(1.1);
+      transition: opacity 1s;
+    }
+
+        /* === 顶部导航栏（统一风格） === */
+    .header {
+      position: fixed; top: 0; left: 0; right: 0; z-index: 50;
+      background: rgba(10, 10, 10, 0.7); 
+      backdrop-filter: blur(20px);
+      border-bottom: 1px solid rgba(255,255,255,0.08);
+      padding: 12px 20px;
+      display: flex; align-items: center; justify-content: space-between;
+    }
+    
+    /* Tailwind 工具类（如果环境没有自动加载就加上） */
+    .flex { display: flex; }
+    .items-center { align-items: center; }
+    .gap-2 { gap: 0.5rem; }
+    .p-2 { padding: 0.5rem; }
+    .rounded-full { border-radius: 9999px; }
+    .transition { transition: all 0.2s; }
+    .hover\:bg-white\/10:hover { background: rgba(255,255,255,0.1); }
+    .hover\:bg-white\/20:hover { background: rgba(255,255,255,0.2); }
+    .cursor-pointer { cursor: pointer; }
+    .text-yellow-400 { color: #fbbf24; }
+    .bg-white\/10 { background: rgba(255,255,255,0.1); }
+    .text-gray-300 { color: #d1d5db; }
+    .hover\:text-white:hover { color: #fff; }
+    .font-bold { font-weight: 700; }
+    .font-semibold { font-weight: 600; }
+    .text-lg { font-size: 1.125rem; }
+    .tracking-wide { letter-spacing: 0.025em; }
+    .truncate { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .max-w-xs { max-width: 20rem; }
+
+    /* === 优化点2：信息卡片 (调亮 & 玻璃感) === */
+    .profile-card {
+      margin-top: 100px;
+      position: relative; overflow: hidden;
+      border-radius: 24px;
+      padding: 40px;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.4); /* 阴影可以让卡片浮起来 */
+      border: 1px solid rgba(255, 255, 255, 0.15); /* 边框亮一点 */
+    }
+    
+    /* 卡片背景图层 */
+    .profile-card::before {
+      content: ''; position: absolute; inset: 0; z-index: -1;
+      background-image: url('/image/${cover1}?dl=jpg');
+      background-size: cover; background-position: center;
+      /* 关键调整：亮度 0.7 (之前是0.5)，模糊度 50px (更柔和) */
+      filter: blur(15px) brightness(0.6) saturate(1.2); 
+      transform: scale(1.2);
+    }
+    
+    /* 遮罩层 (改淡) */
+    .profile-card::after {
+      content: ''; position: absolute; inset: 0; z-index: -1;
+      /* 之前是 0.4，现在改成 0.2，或者用渐变 */
+      background: linear-gradient(to bottom, rgba(0,0,0,0.1), rgba(0,0,0,0.4));
+    }
+
+    /* === 优化点3：多彩平台标签 === */
+    .platform-badge {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 6px 12px; border-radius: 8px; 
+      font-size: 13px; font-weight: 600; 
+      border: 1px solid; /*边框颜色由 inline style 控制*/
+      backdrop-filter: blur(4px);
+      transition: transform 0.2s;
+    }
+    .platform-badge:hover { transform: translateY(-2px); }
+
+    /* 统计数据 */
+    .stat-grid {
+      display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; margin-top: 30px;
+    }
+    @media(min-width: 640px) { .stat-grid { grid-template-columns: repeat(3, 1fr); gap: 20px; } }
+
+    .stat-item {
+      background: rgba(0,0,0,0.2); /* 半透明黑底 */
+      border-radius: 16px; padding: 20px;
+      border: 1px solid rgba(255,255,255,0.05);
+      backdrop-filter: blur(10px);
+      transition: background 0.2s;
+    }
+    .stat-item:hover { background: rgba(255,255,255,0.1); }
+
+    .stat-label { font-size: 12px; color: #ccc; margin-bottom: 6px; display: flex; align-items: center; gap: 6px; font-weight: 500; }
+    .stat-value { font-size: 20px; font-weight: 700; color: #fff; text-shadow: 0 2px 4px rgba(0,0,0,0.3); }
+
+    /* 瀑布流 */
+    .masonry-wrap { display: flex; gap: 16px; margin-top: 40px; align-items: flex-start; }
+    .masonry-col { flex: 1; display: flex; flex-direction: column; gap: 16px; }
+    
+    .img-card {
+      display: block; border-radius: 12px; overflow: hidden; background: #222;
+      position: relative; transition: transform 0.2s;
+      box-shadow: 0 4px 6px rgba(0,0,0,0.2);
+    }
+    .img-card:hover { transform: translateY(-4px); z-index: 10; box-shadow: 0 12px 24px rgba(0,0,0,0.5); }
+    .img-card img { width: 100%; height: auto; display: block; opacity: 0; transition: opacity 0.3s; }
+    .img-card img.loaded { opacity: 1; }
+    .meta { 
+      position: absolute; bottom: 0; left: 0; right: 0; 
+      padding: 60px 12px 12px; /* 顶部留足空间给渐变 */
+      background: linear-gradient(to top, rgba(0,0,0,0.9) 0%, rgba(0,0,0,0.6) 50%, transparent 100%);
+      opacity: 0; transition: opacity 0.3s ease; 
+      pointer-events: none; z-index: 10;
+    }
+    .img-card:hover .meta { opacity: 1; }
+    
+    .title { 
+      font-size: 13px; font-weight: 600; color: #fff; 
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis; 
+      text-shadow: 0 2px 4px rgba(0,0,0,0.8);
+      transform: translateY(10px); transition: transform 0.3s ease;
+    }
+    .img-card:hover .title { transform: translateY(0); }
+  </style>
+</head>
+<body class="px-4 pb-20 md:px-10 lg:px-20">
+  
+  <div class="page-bg"></div>
+  
+  ${typeof SIDEBAR_HTML !== 'undefined' ? SIDEBAR_HTML : ''}
+
+  <div class="header">
+    <!-- 左侧：汉堡菜单 + 名人堂入口 -->
+    <div class="flex items-center gap-2">
+        <div class="p-2 cursor-pointer hover:bg-white/10 rounded-full transition" onclick="toggleSidebar()">
+          <svg width="24" height="24" fill="none" stroke="white" stroke-width="2"><path d="M3 12h18M3 6h18M3 18h18"/></svg>
+        </div>
+        <!-- 画师名人堂入口（高亮） -->
+        <a href="/artists" class="p-2 text-yellow-400 bg-white/10 rounded-full transition hover:bg-white/20" title="画师名人堂">
+          <svg width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 4 0 11-4 0 2 2 0 014 0z"/>
+          </svg>
+        </a>
+    </div>
+
+    <!-- 中间：画师名称 -->
+    <div class="font-bold text-lg tracking-wide truncate max-w-xs">${artist}的作品展</div>    <!-- 右侧：返回首页 -->
+    <a href="/" class="text-gray-300 hover:text-white transition font-semibold">MtcACG</a>
+  </div>
+
+  <div class="max-w-5xl mx-auto">
+    <!-- 信息卡片 -->
+    <div class="profile-card">
+      <div class="flex flex-col md:flex-row md:items-center justify-between gap-6">
+        <div>
+           <div class="flex flex-wrap items-center gap-4 mb-3">
+             <h1 class="text-3xl md:text-5xl font-bold text-white drop-shadow-md">${artist}</h1>
+           </div>
+           
+           <!-- 这里的平台标签已经完全彩色化了 -->
+           <div class="flex flex-wrap gap-2 items-center">
+              ${badgesHtml}
+              <span class="text-gray-300 text-sm ml-2 opacity-80 border-l border-white/20 pl-3">MtcACG 收录画师</span>
+           </div>
+        </div>
+      </div>
+
+      <div class="stat-grid">
+        <div class="stat-item">
+          <span class="stat-label"><span class="w-2 h-2 rounded-full bg-green-400 shadow-[0_0_8px_rgba(74,222,128,0.6)]"></span> 收录作品</span>
+          <span class="stat-value">${count} 张</span>
+        </div>
+        <div class="stat-item">
+          <span class="stat-label"><span class="w-2 h-2 rounded-full bg-blue-400 shadow-[0_0_8px_rgba(96,165,250,0.6)]"></span> 最近更新</span>
+          <span class="stat-value">${updateTime}</span>
+        </div>
+        <div class="stat-item">
+          <span class="stat-label"><span class="w-2 h-2 rounded-full bg-purple-400 shadow-[0_0_8px_rgba(192,132,252,0.6)]"></span> 数据来源</span>
+          <!-- 防止文字太长，只显示前两个，用 title 看全部 -->
+          <span class="stat-value truncate block" title="${platformText}">${platformText}</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- 瀑布流区域 -->
+    <div class="mt-16 mb-8 flex items-end justify-between border-b border-white/10 pb-4">
+       <div class="flex items-center gap-3">
+         <div class="w-1.5 h-8 bg-pink-500 rounded-full shadow-[0_0_10px_#ec4899]"></div>
+         <div>
+           <h2 class="text-2xl font-bold leading-none">Gallery</h2>
+           <span class="text-gray-400 text-xs font-mono uppercase tracking-widest">Selected Works</span>
+         </div>
+       </div>
+       <span class="text-gray-500 font-mono text-sm">${count} ITEMS</span>
+    </div>
+
+    <div id="masonry" class="masonry-wrap"></div>
+    <div id="tip" class="text-center py-10 text-gray-500 text-sm opacity-60">Loading...</div>
+  </div>
+
+  <script>
+    const artistName = "${artist}";
+    let page = 1;
+    let done = false;
+    let isLoading = false;
+    const masonry = document.getElementById('masonry');
+    const tip = document.getElementById('tip');
+    
+    // 智能列数：手机2列，平板3列，电脑4列
+    let colCount = window.innerWidth < 768 ? 2 : (window.innerWidth < 1200 ? 4 : 5);
+    let cols = [];
+    let colHeights = new Array(colCount).fill(0);
+
+    function init() {
+      masonry.innerHTML = '';
+      cols = [];
+      colHeights = new Array(colCount).fill(0);
+      for(let i=0; i<colCount; i++) {
+        const div = document.createElement('div');
+        div.className = 'masonry-col';
+        masonry.appendChild(div);
+        cols.push(div);
+      }
+    }
+    init();
+
+    async function load() {
+      if(done || isLoading) return;
+      isLoading = true;
+      tip.style.opacity = '1';
+      
+      try {
+        const res = await fetch(\`/artist/\${encodeURIComponent(artistName)}?format=json&page=\${page}\`);
+        const data = await res.json();
+        
+        if(data.length === 0) {
+          done = true;
+          tip.textContent = 'End of Gallery';
+          setTimeout(()=>tip.style.opacity='0', 1000);
+          return;
+        }
+
+        for(const item of data) {
+           const w = item.width || 300;
+           const h = item.height || 400;
+           const ratio = h / w;
+           
+           // 贪心算法：找当前最短的那一列插入
+           let min = 0;
+           for(let i=1; i<colCount; i++) if(colHeights[i] < colHeights[min]) min = i;
+           
+
+           // 1. 先提取标题
+           const titleText = (item.caption || '').split('\\n')[0];
+
+           const card = document.createElement('a');
+           card.href = \`/detail/\${item.id}\`;
+           card.className = 'img-card';
+           card.innerHTML = \`
+               <img src="/image/\${item.file_name}?dl=jpg" loading="lazy" onload="this.classList.add('loaded')" style="aspect-ratio:\${w}/\${h}">
+               <div class=\"meta\">
+                   <div class=\"title\">\${titleText}</div>
+               </div>
+           \`;
+
+           
+           cols[min].appendChild(card);
+           colHeights[min] += ratio;
+        }
+        page++;
+      } catch(e) { console.error(e); }
+      isLoading = false;
+    }
+
+    // 触底自动加载
+    window.addEventListener('scroll', () => {
+      if ((window.innerHeight + window.scrollY) >= document.body.offsetHeight - 800) {
+        load();
+      }
+    });
+    
+    // 窗口改变大小时重新布局 (可选优化)
+    let resizeTimer;
+    window.addEventListener('resize', () => {
+      clearTimeout(resizeTimer);
+      resizeTimer = setTimeout(() => {
+        const newCount = window.innerWidth < 768 ? 2 : (window.innerWidth < 1200 ? 3 : 4);
+        if(newCount !== colCount) {
+           colCount = newCount;
+           page = 1; done = false;
+           init(); load();
+        }
+      }, 300);
+    });
+
+    load();
+  </script>
+</body>
+</html>`;
+}
+
 
 

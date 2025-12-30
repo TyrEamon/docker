@@ -153,3 +153,149 @@ export async function handleBgRandom(includeR18, url, env) {
     headers: { 'Content-Type': 'application/json' }
   });
 }
+
+
+// === 4. 画师分类处理函数 (新增) ===
+export async function handleArtists(url, env) {
+  const format = url.searchParams.get('format');
+
+  // API 模式：返回 JSON 数据供瀑布流加载
+  if (format === 'json') {
+    const page = parseInt(url.searchParams.get('page')) || 1;
+    const q = url.searchParams.get('q') || '';
+    const pageSize = 50;
+    const offset = (page - 1) * pageSize;
+
+// ✅ 根据是否有搜索词，决定 SQL 和参数
+    let sql;
+    let params;
+
+    if (q.trim()) {
+      // 有搜索词：模糊匹配画师名
+      sql = `
+        SELECT t.artist, COUNT(*) as count, t.file_name as cover, t.width, t.height
+        FROM (
+          SELECT * FROM images
+          WHERE artist IS NOT NULL AND artist != '' AND artist LIKE ?
+          ORDER BY id DESC
+        ) t
+        GROUP BY t.artist
+        ORDER BY count DESC
+        LIMIT ? OFFSET ?
+      `;
+      params = [`%${q.trim()}%`, pageSize, offset];
+    } else {
+      // 没有搜索词：显示全部画师
+      sql = `
+        SELECT t.artist, COUNT(*) as count, t.file_name as cover, t.width, t.height
+        FROM (
+          SELECT * FROM images
+          WHERE artist IS NOT NULL AND artist != ''
+          ORDER BY id DESC
+        ) t
+        GROUP BY t.artist
+        ORDER BY count DESC
+        LIMIT ? OFFSET ?
+      `;
+      params = [pageSize, offset];
+    }
+
+    try {
+      // ✅ 这里改成用动态的 params
+      const { results } = await env.DB.prepare(sql).bind(...params).all();
+      return new Response(JSON.stringify(results), {
+        headers: { 'Content-Type': 'application/json', 'Cache-Control': 'public, max-age=3600' }
+      });
+    } catch (e) {
+      return new Response(JSON.stringify({ error: e.message }), { status: 500 });
+    }
+  }
+
+  // 页面模式：返回 HTML 骨架
+  const { htmlArtists } = await import('./templates.js');
+  return new Response(htmlArtists(), {
+    headers: { 'Content-Type': 'text/html;charset=UTF-8' }
+  });
+}
+
+
+// logic.js
+
+export async function handleArtistProfile(artistName, url, env) {
+  const artist = decodeURIComponent(artistName);
+
+  // 1. 获取基础统计
+  const metaSql = `SELECT COUNT(*) as count, MAX(created_at) as last_update FROM images WHERE artist = ?`;
+  const meta = await env.DB.prepare(metaSql).bind(artist).first();
+
+  if (!meta || meta.count === 0) {
+    return new Response("Artist not found", { status: 404 });
+  }
+
+  // 2. 获取用于背景的图片 (取最新的 2 张)
+  // cover1: 用于卡片背景 (最新的一张)
+  // cover2: 用于网页大背景 (第二新的一张，如果没有则复用 cover1)
+  const coverSql = `SELECT file_name FROM images WHERE artist = ? ORDER BY created_at DESC LIMIT 2`;
+  const { results: covers } = await env.DB.prepare(coverSql).bind(artist).all();
+  
+  const cover1 = covers[0]?.file_name;
+  const cover2 = covers[1]?.file_name || cover1; // 如果只有一张图，大背景也用它
+
+  // 3. 智能分析多平台来源 (扫描最近 20 张图)
+  const platformSql = `SELECT id FROM images WHERE artist = ? LIMIT 20`;
+  const { results: sampleIds } = await env.DB.prepare(platformSql).bind(artist).all();
+  
+  let platforms = new Set(); // 使用 Set 去重
+  
+  sampleIds.forEach(row => {
+    if (row.id.startsWith('pixiv_')) platforms.add('Pixiv');
+    else if (row.id.startsWith('yande')) platforms.add('Yande.re');
+    else if (row.id.startsWith('mtcacg')) platforms.add('MtcACG');
+    else if (row.id.startsWith('twitter')) platforms.add('Twitter');
+    else platforms.add('Other');
+  });
+
+  // 将 Set 转为数组并排序，然后用 "、" 连接
+  // 优先显示 Pixiv, Yande
+  const priority = ['Pixiv', 'Yande.re', 'MtcACG', 'Twitter'];
+  const sortedPlatforms = Array.from(platforms).sort((a, b) => {
+      return (priority.indexOf(a) === -1 ? 99 : priority.indexOf(a)) - 
+             (priority.indexOf(b) === -1 ? 99 : priority.indexOf(b));
+  });
+  
+  const platformText = sortedPlatforms.join('、');
+
+  // 4. AJAX 逻辑 (保持不变)
+  const format = url.searchParams.get('format');
+  if (format === 'json') {
+    const page = parseInt(url.searchParams.get('page')) || 1;
+    const pageSize = 15;
+    const offset = (page - 1) * pageSize;
+    const postsSql = `SELECT * FROM images WHERE artist = ? ORDER BY created_at DESC LIMIT ? OFFSET ?`;
+    const { results } = await env.DB.prepare(postsSql).bind(artist, pageSize, offset).all();
+    return new Response(JSON.stringify(results), { headers: { 'Content-Type': 'application/json' } });
+  }
+
+  // 5. 渲染 HTML
+  const { htmlArtistProfile } = await import('./templates.js');
+  
+  let updateTime = '未知';
+  if(meta.last_update) {
+    const ts = meta.last_update.toString().length === 10 ? meta.last_update * 1000 : meta.last_update;
+    const d = new Date(ts);
+    updateTime = `${d.getFullYear()}-${d.getMonth()+1}-${d.getDate()}`;
+  }
+
+  return new Response(htmlArtistProfile({
+    artist,
+    count: meta.count,
+    updateTime,
+    cover1, // 卡片背景
+    cover2, // 网页大背景
+    platformText
+  }), {
+    headers: { 'Content-Type': 'text/html;charset=UTF-8' }
+  });
+}
+
+
